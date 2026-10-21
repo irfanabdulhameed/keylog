@@ -10,6 +10,11 @@ public final class EventTap {
     public var onEvent: ((InputEvent, Date, Double) -> Void)?
     /// Called when macOS had switched the tap off, so events may have been missed.
     public var onResume: (() -> Void)?
+    /// Keyboard types whose keys aren't counted.
+    public var ignoredKeyboards: Set<Int> = []
+    /// Called the first time a keyboard type sends a key in this session.
+    public var onKeyboardSeen: ((Int) -> Void)?
+    private var seenKeyboards: Set<Int> = []
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -57,6 +62,16 @@ public final class EventTap {
     }
 
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) {
+        if type == .keyDown || type == .flagsChanged {
+            // Each keyboard reports a type; skip keyboards the user turned off, such as
+            // the virtual keyboard mouse tools use to turn side buttons into shortcuts.
+            let keyboard = Int(event.getIntegerValueField(.keyboardEventKeyboardType))
+            if !seenKeyboards.contains(keyboard) {
+                seenKeyboards.insert(keyboard)
+                onKeyboardSeen?(keyboard)
+            }
+            if ignoredKeyboards.contains(keyboard) { return }
+        }
         let input: InputEvent
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
@@ -151,3 +166,4 @@ public final class KeyTranslator {
         return String(utf16CodeUnits: chars, count: length).first
     }
 }
+

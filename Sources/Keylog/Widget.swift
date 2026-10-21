@@ -97,7 +97,7 @@ struct WidgetStyle: Codable, Equatable {
     var allDesktops = true
     /// A tiny scale pulse on every key press.
     var pulseOnKey = true
-    var pulseScale = 1.01
+    var pulseScale = 1.02
 
     mutating func apply(_ preset: Preset) {
         self.preset = preset
@@ -168,6 +168,7 @@ extension WidgetStyle {
         read(.allDesktops, &allDesktops)
         read(.pulseOnKey, &pulseOnKey)
         read(.pulseScale, &pulseScale)
+        if ![1.02, 1.05, 1.07].contains(pulseScale) { pulseScale = 1.02 }
     }
 }
 
@@ -212,7 +213,8 @@ struct WidgetView: View {
                 CubicKeyframe(pulsePeak, duration: 0.06)
                 SpringKeyframe(1.0, duration: 0.22, spring: .smooth)
             }
-            .padding(3)
+            .padding(.horizontal, 3 + pulseRoom(style).width)
+            .padding(.vertical, 3 + pulseRoom(style).height)
             .help(model.isCounting ? "\(Format.count(model.today.keys)) keys today" : "Keylog isn't counting yet")
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(Format.count(model.today.keys)) keys today")
@@ -246,6 +248,13 @@ struct WidgetView: View {
         if moving {
             shape(style).stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
         }
+    }
+
+    /// Space around the pill so the pulse never gets clipped by the window edge.
+    private func pulseRoom(_ style: WidgetStyle) -> CGSize {
+        guard style.pulseOnKey else { return .zero }
+        let grow = max(0, style.pulseScale - 1) / 2
+        return CGSize(width: ceil(style.fontSize * 7 * grow), height: ceil(style.fontSize * 1.8 * grow))
     }
 
     private var pulsePeak: Double {

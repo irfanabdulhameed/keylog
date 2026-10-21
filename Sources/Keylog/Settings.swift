@@ -20,7 +20,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: 470
         case .widget: 660
-        case .tracking: 380
+        case .tracking: 520
         case .data: 390
         }
     }
@@ -227,9 +227,9 @@ struct WidgetSettings: View {
                     Toggle("Pulse on each key press", isOn: $model.widget.pulseOnKey)
                     if model.widget.pulseOnKey {
                         Picker("Pulse size", selection: $model.widget.pulseScale) {
-                            Text("100.5%").tag(1.005)
-                            Text("101%").tag(1.01)
                             Text("102%").tag(1.02)
+                            Text("105%").tag(1.05)
+                            Text("107%").tag(1.07)
                         }
                         .pickerStyle(.segmented)
                         Text("A tiny grow-and-settle as you type. Off when Reduce Motion is on.")
@@ -277,6 +277,17 @@ struct TrackingSettings: View {
                 Toggle("Measure mouse travel and scrolling", isOn: $model.tracksMouse)
                 Text("Clicks are always counted.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach($model.keyboards) { $keyboard in
+                    Toggle(keyboard.name, isOn: $keyboard.counts)
+                }
+            } header: {
+                Text("Keyboards")
+            } footer: {
+                Text("Keyboards appear here when they first send a key. Mouse tools such as USB Overdrive turn side buttons into keyboard shortcuts through a virtual keyboard; it's off so those don't count.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("What Keylog stores") {
                 VStack(alignment: .leading, spacing: 6) {

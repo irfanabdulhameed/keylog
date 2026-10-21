@@ -146,6 +146,7 @@ Keylog needs the macOS **Input Monitoring** permission to see key presses. It us
 |---|---|
 | Holding a key down counts **once** | Auto-repeat isn't typing |
 | Only **left and right** clicks count | Side and wheel buttons are for navigating, not clicking |
+| Keys from **virtual keyboards** don't count | Mouse tools like USB Overdrive turn side buttons into shortcuts through one; every keyboard can be switched on or off in Settings |
 | ⌘ ⇧ ⌥ ⌃ fn count only when **tapped on their own** | A capital letter is one key press, not two; ⌘C counts as one letter |
 | Shortcuts still light up their modifiers **on the heatmap** | So you can see how hard ⌘ really works |
 | Groups follow the **character typed** | ⇧1 types `!`, so it counts as special |

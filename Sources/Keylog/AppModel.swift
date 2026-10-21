@@ -36,6 +36,13 @@ final class AppModel: ObservableObject {
         didSet { if !Snapshot.isRendering { widget.save() } }
     }
     @Published var isMovingWidget = false
+    /// Every keyboard type seen, and whether its keys count.
+    @Published var keyboards = Preferences.keyboards {
+        didSet {
+            Preferences.keyboards = keyboards
+            onKeyboardsChange(ignoredKeyboards)
+        }
+    }
     /// Bumped when stored data changes outside normal counting (delete all).
     @Published private(set) var dataVersion = 0
 
@@ -43,6 +50,16 @@ final class AppModel: ObservableObject {
     let recorder: Recorder
     var onPauseChange: (Bool) -> Void = { _ in }
     var onTrackMouseChange: (Bool) -> Void = { _ in }
+    var onKeyboardsChange: (Set<Int>) -> Void = { _ in }
+
+    var ignoredKeyboards: Set<Int> { Set(keyboards.filter { !$0.counts }.map(\.type)) }
+
+    /// Adds a keyboard type the first time it sends a key.
+    func keyboardSeen(_ type: Int) {
+        guard !keyboards.contains(where: { $0.type == type }) else { return }
+        keyboards.append(KeyboardSource(type: type, counts: !KeyboardSource.virtualTypes.contains(type)))
+        keyboards.sort { $0.type > $1.type }
+    }
     private var updateScheduled = false
     private var lastPublish = Date.distantPast
 
@@ -145,6 +162,21 @@ final class AppModel: ObservableObject {
     }
 }
 
+/// A keyboard as macOS reports it: by type, not by name.
+struct KeyboardSource: Codable, Equatable, Identifiable {
+    /// Type 3 is an old Apple keyboard no Mac uses today; virtual keyboards, such as
+    /// the one USB Overdrive uses to turn mouse buttons into shortcuts, report it.
+    static let virtualTypes: Set<Int> = [3]
+
+    let type: Int
+    var counts: Bool
+    var id: Int { type }
+
+    var name: String {
+        KeyboardSource.virtualTypes.contains(type) ? "Virtual keyboard (mouse button shortcuts)" : "Keyboard, type \(type)"
+    }
+}
+
 enum MenuBarDisplay: String, CaseIterable, Identifiable {
     case icon, keys, keysAndClicks
     var id: Self { self }
@@ -198,6 +230,20 @@ enum Preferences {
     static var menuBarDisplay: MenuBarDisplay {
         get { defaults.string(forKey: "menuBarDisplay").flatMap(MenuBarDisplay.init) ?? .keys }
         set { defaults.set(newValue.rawValue, forKey: "menuBarDisplay") }
+    }
+
+    /// Starts with the virtual keyboard switched off.
+    static var keyboards: [KeyboardSource] {
+        get {
+            guard let data = defaults.data(forKey: "keyboards"),
+                  let list = try? JSONDecoder().decode([KeyboardSource].self, from: data) else {
+                return KeyboardSource.virtualTypes.map { KeyboardSource(type: $0, counts: false) }
+            }
+            return list
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) { defaults.set(data, forKey: "keyboards") }
+        }
     }
 
     static var weekStart: WeekStart {

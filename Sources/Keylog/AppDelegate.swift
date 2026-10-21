@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         tap.onResume = { [processor] in processor?.resetState() }
+        tap.ignoredKeyboards = model.ignoredKeyboards
+        tap.onKeyboardSeen = { [weak model] type in
+            DispatchQueue.main.async { model?.keyboardSeen(type) }
+        }
+        model.onKeyboardsChange = { [tap] ignored in tap.ignoredKeyboards = ignored }
 
         settings = SettingsController(model: model) { [unowned self] in self.actions }
         dashboard = DashboardController(model: model) { [weak self] in self?.settings.show() }
