@@ -25,53 +25,95 @@ func thermal(_ t: Double) -> (Double, Double, Double) {
     return (1, 1, 1)
 }
 
-/// A key glowing with its own heat.
+/// A keycap lit from inside by its own heat: a dark body, a glowing top with a
+/// hot centre and a glassy sheen, and light spilling onto the desk below.
 struct GlowKey: View {
     var heat: Double
     var width: CGFloat
-    var height: CGFloat = 122
+    var height: CGFloat = 132
+    /// The hottest key burns white in the middle and orange at its ends.
+    var whiteHot = false
+    static let orange = Color(red: 1, green: 0.42, blue: 0.1)
+    static let yellow = Color(red: 1, green: 0.82, blue: 0.25)
 
     var body: some View {
-        let rgb = thermal(heat)
+        let rgb = whiteHot ? (1.0, 0.55, 0.15) : thermal(heat)
         let color = Color(red: rgb.0, green: rgb.1, blue: rgb.2)
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(RadialGradient(colors: [mix(rgb, (1, 1, 1), 0.3), color, mix(rgb, (0, 0, 0), 0.3)],
-                                 center: .center, startRadius: 4, endRadius: max(width, height) * 0.75))
-            .overlay(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(mix(rgb, (1, 1, 1), 0.55).opacity(0.9), lineWidth: 3))
-            .frame(width: width, height: height)
-            .shadow(color: color.opacity(0.75), radius: 9)
-            .shadow(color: color.opacity(0.35), radius: 26)
+        let top: AnyShapeStyle = whiteHot
+            ? AnyShapeStyle(LinearGradient(colors: [Self.orange, Self.yellow, .white, Self.yellow, Self.orange],
+                                           startPoint: .leading, endPoint: .trailing))
+            : AnyShapeStyle(RadialGradient(colors: [mix(rgb, (1, 1, 1), 0.45), color, mix(rgb, (0, 0, 0), 0.15)],
+                                           center: UnitPoint(x: 0.5, y: 0.42), startRadius: 2,
+                                           endRadius: max(width, height) * 0.62))
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(LinearGradient(colors: [mix(rgb, (0, 0, 0), 0.4), mix(rgb, (0, 0, 0), 0.72)],
+                                     startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(top)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(LinearGradient(colors: [.white.opacity(0.42), .white.opacity(0)], startPoint: .top, endPoint: .center)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(mix(rgb, (1, 1, 1), 0.6).opacity(0.75), lineWidth: 2))
+                .padding(.horizontal, 10)
+                .padding(.top, 7)
+                .padding(.bottom, height * 0.17)
+        }
+        .frame(width: width, height: height)
+        .shadow(color: color.opacity(0.6), radius: 14, y: 8)
+        .shadow(color: color.opacity(0.25), radius: 34, y: 14)
     }
 }
 
 /// macOS icon grid: an 824 pt rounded square on a 1024 pt canvas.
 struct ThermalIcon: View {
     var body: some View {
+        let body = RoundedRectangle(cornerRadius: 185, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: 185, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 0.09, green: 0.07, blue: 0.13), Color(red: 0.02, green: 0.02, blue: 0.04)],
-                                     startPoint: .top, endPoint: .bottom))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 185, style: .continuous)
-                        .strokeBorder(LinearGradient(colors: [.white.opacity(0.25), .white.opacity(0.02)],
-                                                     startPoint: .top, endPoint: .bottom), lineWidth: 3))
-                .frame(width: 824, height: 824)
-                .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
-            VStack(spacing: 22) {
-                HStack(spacing: 22) {
-                    ForEach([0.22, 0.42, 0.86, 0.6, 0.5], id: \.self) { GlowKey(heat: $0, width: 122) }
-                }
-                .offset(x: -26)
-                HStack(spacing: 22) {
-                    ForEach([0.74, 0.55, 0.35, 0.28, 0.12], id: \.self) { GlowKey(heat: $0, width: 122) }
-                }
-                .offset(x: 26)
-                GlowKey(heat: 1.0, width: 560)
+            ZStack {
+                LinearGradient(colors: [Color(red: 0.085, green: 0.065, blue: 0.125), Color(red: 0.024, green: 0.02, blue: 0.035)],
+                               startPoint: .top, endPoint: .bottom)
+                // Heat pooling on the desk under the hottest keys, and a cool cast from above.
+                Ellipse()
+                    .fill(RadialGradient(colors: [Color(red: 1, green: 0.45, blue: 0.12).opacity(0.32), .clear],
+                                         center: .center, startRadius: 0, endRadius: 360))
+                    .frame(width: 760, height: 300)
+                    .offset(y: 205)
+                Ellipse()
+                    .fill(RadialGradient(colors: [Color(red: 0.25, green: 0.4, blue: 1).opacity(0.16), .clear],
+                                         center: .center, startRadius: 0, endRadius: 420))
+                    .frame(width: 820, height: 420)
+                    .offset(x: -160, y: -300)
             }
-            .rotation3DEffect(.degrees(26), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.4)
-            .offset(y: 10)
+            .clipShape(body)
+            .overlay(
+                body.strokeBorder(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0.03)],
+                                                 startPoint: .top, endPoint: .bottom), lineWidth: 3))
+            .frame(width: 824, height: 824)
+            .shadow(color: .black.opacity(0.3), radius: 18, y: 10)
+
+            VStack(spacing: 18) {
+                HStack(spacing: 18) {
+                    ForEach([0.15, 0.4, 0.92, 0.6, 0.78], id: \.self) { GlowKey(heat: $0, width: 120, height: 124) }
+                }
+                .offset(x: -20)
+                HStack(spacing: 18) {
+                    ForEach([0.7, 0.55, 0.45, 0.35, 0.28], id: \.self) { GlowKey(heat: $0, width: 120, height: 124) }
+                }
+                .offset(x: 20)
+                HStack(spacing: 18) {
+                    GlowKey(heat: 0.5, width: 120, height: 124)
+                    GlowKey(heat: 1, width: 420, height: 124, whiteHot: true)
+                    GlowKey(heat: 0.24, width: 120, height: 124)
+                }
+            }
+            .rotation3DEffect(.degrees(30), axis: (x: 1, y: 0, z: 0), anchor: .center, perspective: 0.45)
+            .offset(y: -18)
+            // Keep every glow inside the icon's shape.
+            .frame(width: 824, height: 824)
+            .clipShape(body)
         }
         .frame(width: 1024, height: 1024)
     }
