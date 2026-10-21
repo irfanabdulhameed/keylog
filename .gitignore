@@ -7,3 +7,4 @@ build/
 *.p12
 *.key
 *.swp
+context.md
