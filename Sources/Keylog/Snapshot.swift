@@ -88,6 +88,7 @@ enum Snapshot {
         render(Showcase(padding: 56) {
             HStack(spacing: 40) { ForEach(widgets.indices, id: \.self) { widgets[$0] } }
         }, to: readme, "widget", dark: false)
+        render(SocialScene(panel: panel), to: readme, "social", dark: true)
         render(Showcase { MacWindow(title: "Widget") { SettingsTab.widget.content(model: model, actions: actions) }
                     .frame(width: 560, height: 615) },
                to: readme, "settings", dark: false)
@@ -215,6 +216,53 @@ struct MacWindow<Content: View>: View {
     }
 }
 
+/// The 1280 × 640 card GitHub shows when the repo link is shared.
+struct SocialScene<Panel: View>: View {
+    let panel: Panel
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Wallpaper()
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(spacing: 20) {
+                    Image(nsImage: NSImage(contentsOfFile: "Resources/AppIcon.png") ?? NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 132, height: 132)
+                    Text("Keylog")
+                        .font(.system(size: 84, weight: .bold, design: .rounded))
+                }
+                Text("The private keystroke counter\nand keyboard heatmap for macOS")
+                    .font(.system(size: 36, weight: .semibold))
+                    .lineSpacing(4)
+                    .opacity(0.95)
+                HStack(spacing: 10) {
+                    ForEach(["Typing speed & WPM", "Keyboard heatmap", "100% offline", "Open source"], id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 19, weight: .semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.white.opacity(0.16), in: Capsule())
+                    }
+                }
+                Text("Every key you press, counted. Never recorded.")
+                    .font(.system(size: 22, weight: .medium))
+                    .opacity(0.8)
+            }
+            .foregroundStyle(.white)
+            .padding(.leading, 72)
+            .padding(.top, 92)
+
+            panel
+                .fixedSize()
+                .scaleEffect(0.7, anchor: .topLeading)
+                .frame(width: 252, height: 600, alignment: .topLeading)
+                .offset(x: 970, y: 34)
+        }
+        .frame(width: 1280, height: 640)
+        .clipped()
+    }
+}
+
 /// The opening README image: a desktop with the dashboard, the panel and the widget.
 struct HeroScene<Dashboard: View, Panel: View, Widget: View>: View {
     let dashboard: Dashboard
@@ -317,6 +365,7 @@ enum DemoData {
                 flush.counts.mouseMM = Double(keys) * (4 + 4 * random.next())
                 flush.counts.scrollMM = Double(keys) * (1 + random.next())
                 flush.counts.peakKPS = 6 + Int(random.next() * 9)
+                flush.counts.peakCPS = 3 + Int(random.next() * 6)
                 let minutes = min(60, keys / 90 + 5)
                 for _ in 0..<minutes { flush.minutesMask |= 1 << UInt64(Int(random.next() * 60)) }
 

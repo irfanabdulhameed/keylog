@@ -19,7 +19,11 @@ public final class Recorder {
     /// Every minute typed in this hour, including minutes already written.
     private var hourMask: UInt64 = 0
     private var hourPeak = 0
+    private var hourPeakCPS = 0
     private var speed = SpeedMeter()
+    private var clickSpeed = SpeedMeter()
+    /// Keys in the last 10 seconds, for the live typing speed.
+    private var recentKeys = SpeedMeter(window: 10)
 
     public init(store: Store, clock: DayClock = DayClock(), now: Date = Date()) {
         self.store = store
@@ -54,6 +58,11 @@ public final class Recorder {
         onChange?()
     }
 
+    /// Typing speed right now: keys in the last 10 seconds, as keys per minute.
+    public func liveKeysPerMinute(at uptime: Double = ProcessInfo.processInfo.systemUptime) -> Int {
+        recentKeys.count(at: uptime) * 6
+    }
+
     /// Writes everything gathered so far. `wait` blocks until it is on disk.
     public func flush(wait: Bool = false) {
         if !pending.isEmpty {
@@ -85,6 +94,7 @@ public final class Recorder {
             hourMask |= bit
             today.activeMinutes += 1
         }
+        _ = recentKeys.tick(at: uptime)
         let lastSecond = speed.tick(at: uptime)
         if lastSecond > hourPeak {
             hourPeak = lastSecond
@@ -101,10 +111,18 @@ public final class Recorder {
         todayKeys[code, default: 0] += 1
     }
 
-    public func recordClick(_ button: MouseButton, at date: Date) {
+    public func recordClick(_ button: MouseButton, at date: Date, uptime: Double? = nil) {
         roll(to: date)
         pending.counts[button] += 1
         today[button] += 1
+        if let uptime {
+            let lastSecond = clickSpeed.tick(at: uptime)
+            if lastSecond > hourPeakCPS {
+                hourPeakCPS = lastSecond
+                pending.counts.peakCPS = lastSecond
+            }
+            today.peakCPS = max(today.peakCPS, lastSecond)
+        }
         update(frontApp()) { $0.clicks += 1 }
         onChange?()
     }
@@ -143,6 +161,7 @@ public final class Recorder {
         let hour = rows.first { $0.hour == bucket.hour }
         hourMask = hour?.minutesMask ?? 0
         hourPeak = hour?.counts.peakKPS ?? 0
+        hourPeakCPS = hour?.counts.peakCPS ?? 0
     }
 
     private func frontApp() -> (id: String, name: String)? {

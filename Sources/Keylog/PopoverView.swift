@@ -39,6 +39,7 @@ struct PopoverView: View {
     @ObservedObject var feed: PanelFeed
     let actions: AppActions
     @State private var days = 7
+    @AppStorage("historyLine") private var lineChart = false
     @State private var metric = HistoryMetric.keys
     @State private var history: PeriodStats?
     @State private var firstDay: Date?
@@ -175,7 +176,8 @@ struct PopoverView: View {
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             GridRow {
                 StatTile(icon: "cursorarrow.click.2", tint: .blue, title: "Clicks",
-                         value: Format.count(today.clicks), caption: clicks)
+                         value: Format.count(today.clicks),
+                         caption: today.peakCPS > 0 ? clicks + " · peak \(today.peakCPS)/s" : clicks)
                 StatTile(icon: "arrow.up.and.down.and.arrow.left.and.right", tint: .green, title: "Mouse",
                          value: Format.distance(mm: today.mouseMM), caption: "pointer travel")
             }
@@ -183,8 +185,9 @@ struct PopoverView: View {
                 StatTile(icon: "scroll", tint: .orange, title: "Scroll",
                          value: Format.distance(mm: today.scrollMM), caption: "wheel and trackpad")
                 StatTile(icon: "speedometer", tint: .purple, title: "Speed",
-                         value: typing ? "\(Int(today.keysPerActiveMinute.rounded()))/min" : "–",
-                         caption: typing ? "≈ \(Int((today.keysPerActiveMinute / 5).rounded())) wpm · peak \(today.peakKPS)/s" : "keys per minute typing")
+                         value: feed.liveKPM > 0 ? "\(feed.liveKPM)/min" : typing ? "\(Int(today.keysPerActiveMinute.rounded()))/min" : "–",
+                         caption: typing ? "avg \(Int(today.keysPerActiveMinute.rounded()))/min · ≈ \(Int((today.keysPerActiveMinute / 5).rounded())) wpm" : "keys per minute typing",
+                         badge: feed.liveKPM > 0 ? "live" : nil)
             }
         }
     }
@@ -250,9 +253,30 @@ struct PopoverView: View {
                 .labelsHidden()
                 .fixedSize()
                 .controlSize(.small)
+                Button {
+                    lineChart.toggle()
+                } label: {
+                    Image(systemName: lineChart ? "chart.bar.fill" : "chart.xyaxis.line")
+                }
+                .buttonStyle(IconButtonStyle())
+                .help(lineChart ? "Show as bars" : "Show as a line")
             }
             Chart(points, id: \.day) { point in
-                if point.hasData {
+                if lineChart {
+                    if point.hasData {
+                        AreaMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
+                            .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0)],
+                                                            startPoint: .top, endPoint: .bottom))
+                            .interpolationMethod(.catmullRom)
+                        LineMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
+                            .foregroundStyle(Color.accentColor)
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        PointMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
+                            .foregroundStyle(Color.accentColor)
+                            .symbolSize(point.isToday ? 40 : 16)
+                    }
+                } else if point.hasData {
                     BarMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
                         .foregroundStyle(point.isToday ? Color.accentColor.gradient : Color.accentColor.opacity(0.5).gradient)
                         .cornerRadius(3)
@@ -419,6 +443,8 @@ struct StatTile: View {
     let title: String
     let value: String
     let caption: String
+    /// A small live marker next to the title.
+    var badge: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -431,6 +457,14 @@ struct StatTile: View {
                 Text(title)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                if let badge {
+                    HStack(spacing: 3) {
+                        Circle().fill(.green).frame(width: 5, height: 5)
+                        Text(badge)
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.green)
+                }
             }
             Text(value)
                 .font(.system(size: 20, weight: .semibold, design: .rounded))

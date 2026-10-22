@@ -26,6 +26,8 @@ public struct Counts: Equatable, Sendable {
     public var activeMinutes = 0
     /// Most keys pressed in any one second.
     public var peakKPS = 0
+    /// Most clicks in any one second.
+    public var peakCPS = 0
 
     public init() {}
 
@@ -92,6 +94,7 @@ public struct Counts: Equatable, Sendable {
         scrollMM += o.scrollMM
         activeMinutes += o.activeMinutes
         peakKPS = max(peakKPS, o.peakKPS)
+        peakCPS = max(peakCPS, o.peakCPS)
     }
 
     public var isEmpty: Bool { self == Counts() }

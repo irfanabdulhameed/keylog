@@ -18,10 +18,10 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     /// Each tab's window height; the window resizes as you switch tabs.
     var height: CGFloat {
         switch self {
-        case .general: 470
+        case .general: 700
         case .widget: 660
         case .tracking: 520
-        case .data: 390
+        case .data: 480
         }
     }
 
@@ -105,6 +105,23 @@ struct GeneralSettings: View {
                 Picker("Show", selection: $model.menuBarDisplay) {
                     ForEach(MenuBarDisplay.allCases) { Text($0.title).tag($0) }
                 }
+                Toggle("Colour the icon by typing speed", isOn: $model.tintBySpeed)
+                Text("Green when you type quickly, then yellow, orange and red as you speed up.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Notifications") {
+                Picker("Keys milestone", selection: $model.keyMilestone) {
+                    Text("Off").tag(0)
+                    ForEach([5_000, 10_000, 25_000, 50_000], id: \.self) { Text("Every \(Format.count($0))").tag($0) }
+                }
+                Picker("Clicks milestone", selection: $model.clickMilestone) {
+                    Text("Off").tag(0)
+                    ForEach([1_000, 2_500, 5_000], id: \.self) { Text("Every \(Format.count($0))").tag($0) }
+                }
+                Text("A notification each time today's count passes a milestone.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Dashboard") {
                 Picker("Weeks start on", selection: $model.weekStart) {
@@ -307,6 +324,7 @@ struct TrackingSettings: View {
 struct DataSettings: View {
     @ObservedObject var model: AppModel
     @State private var confirmingDelete = false
+    @State private var confirmingReset = false
     @State private var confirmingDeleteAgain = false
 
     var body: some View {
@@ -322,11 +340,13 @@ struct DataSettings: View {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: model.store.path)])
                 }
             }
-            Section("Export") {
+            Section("Export and import") {
                 Button("Daily Totals as CSV…") { Exporter.csv(model) }
                 Button("Full Backup as JSON…") { Exporter.json(model) }
+                Button("Import Backup…") { Importer.run(model) }
             }
             Section {
+                Button("Reset Today…", role: .destructive) { confirmingReset = true }
                 Button("Delete All Data…", role: .destructive) { confirmingDelete = true }
                 Text("Removes every count since the first day. Settings are kept.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -334,6 +354,11 @@ struct DataSettings: View {
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .confirmationDialog("Reset today's counts?", isPresented: $confirmingReset) {
+            Button("Reset Today", role: .destructive) { model.resetToday() }
+        } message: {
+            Text("Today starts again from zero. Earlier days are kept.")
+        }
         .confirmationDialog("Delete all of Keylog's data?", isPresented: $confirmingDelete) {
             Button("Continue…", role: .destructive) { confirmingDeleteAgain = true }
         } message: {

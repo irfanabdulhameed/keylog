@@ -4,9 +4,9 @@
 
 # Keylog
 
-**Every key you press, counted. Never recorded.**
+**The private keystroke counter and keyboard heatmap for macOS.**
 
-A native macOS menu bar app that turns your typing into a live heatmap: keys, groups, apps, speed, clicks and mouse travel, all on your Mac and nowhere else.
+Count every key you press and see your typing speed (WPM), clicks and mouse distance by day, week, month and year. A native menu bar app that never records what you type and never goes online.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000?logo=apple&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
@@ -30,6 +30,18 @@ You type tens of thousands of keys a day. Keylog shows you how: which keys work 
 - **Truly native.** Swift, SwiftUI and AppKit. No Electron, no web views, no third-party libraries. About 0% CPU at rest and around 40 MB of memory.
 - **Made for macOS 26.** Liquid Glass panel and widget, with a frosted fallback on macOS 14 and 15.
 
+> Looking for a free, open-source **WhatPulse** or **KeyStats** alternative that never goes online? You've found it.
+
+## Everything Keylog does
+
+| Counting | Insights | On screen | Your data |
+|---|---|---|---|
+| Keystrokes per key, per app, per hour | Typing speed: live, average and WPM | Glass panel in the menu bar | One local SQLite file |
+| Letters, numbers, special, space and other | Keyboard heatmap for any period | Floating counter with key-press pulse | CSV and JSON export |
+| Left and right clicks, clicks per second | Best day, busiest hour and weekday | Menu bar icon coloured by speed | Import a backup |
+| Mouse travel and scroll in real metres | Correction rate (Delete presses) | Milestone notifications | Reset today or everything |
+| Fastest second and time spent typing | Year calendar of every day | Line or bar charts | Per-keyboard on/off switches |
+
 <br>
 
 ## Features
@@ -46,9 +58,10 @@ Click the keyboard icon in the menu bar for a glass panel with everything about 
 - Total keys, split into **letters, numbers, special characters, space and other keys**, with counts and percentages
 - Keys per hour, with the current hour live
 - Left and right clicks, mouse travel and scroll distance in real metres
-- Typing speed: keys per minute while typing, estimated WPM and your fastest second
+- Typing speed **live as you type**, your average while typing, estimated WPM and your fastest second
+- Clicks per second at your quickest
 - Your five hottest keys, drawn as heat-coloured keycaps
-- The last 7 or 30 days, by keys, clicks, mouse or scroll
+- The last 7 or 30 days, by keys, clicks, mouse or scroll, as bars or a line
 
 Right-click or ⌃-click the icon for a quick menu.
 
@@ -85,7 +98,9 @@ Keys are counted by their physical position, so switching between QWERTY, AZERTY
 
 ### A dashboard for the long view
 
-Day, week, month, year or all time, with keyboard shortcuts for all of it (⌘1 to ⌘5, ⌘← ⌘→, ⌘T). Bars stack by key group; hover for exact numbers, click a bar to open that day or month.
+Day, week, month, year or all time, with keyboard shortcuts for all of it (⌘1 to ⌘5, ⌘← ⌘→, ⌘T). Bars stack by key group, or switch to totals or a line; hover for exact numbers, click a bar to open that day or month.
+
+An **Insights** card picks out what stands out: your best day or busiest hour, your most active weekday, how often you reach for Delete, your fastest clicking, and how far your mouse travelled in football pitches or marathons.
 
 <img src="docs/screenshots/overview.jpg" alt="Dashboard overview for a week: total keys, group tiles, keys per day stacked by group, share donut and typing speed" width="100%">
 
@@ -114,7 +129,7 @@ Day, week, month, year or all time, with keyboard shortcuts for all of it (⌘1 
 
 ### Settings that feel like macOS
 
-A proper Settings window with toolbar tabs: launch at login, what the menu bar shows, which day your week starts, per-app and mouse tracking, every widget option with a live preview, CSV and JSON export, and a delete-everything button that asks twice.
+A proper Settings window with toolbar tabs: launch at login, what the menu bar shows, a menu bar icon that turns green, yellow and red as you type faster, milestone notifications ("10,000 keys today"), which day your week starts, per-app, mouse and per-keyboard tracking, every widget option with a live preview, CSV and JSON export, backup import, and resets that ask before they act.
 
 <div align="center">
 <img src="docs/screenshots/settings.jpg" alt="Widget settings with a live preview" width="62%">
@@ -218,6 +233,18 @@ swift build && .build/debug/Keylog --snapshot ~/Desktop/keylog-shots
 <br>
 
 ## FAQ
+
+**How do I count keystrokes on a Mac?**
+Install Keylog and allow Input Monitoring. Today's total sits in the menu bar, and the dashboard keeps every day since.
+
+**How can I see my typing speed (WPM) on macOS?**
+Keylog shows your speed live as you type, your average keys per minute while typing, an estimated WPM, and your fastest second.
+
+**Is there a keyboard heatmap app for Mac?**
+Yes: Keylog colours every key by how often you press it, for a day, a week, a month, a year or all time, and per app.
+
+**Does it count mouse side buttons?**
+No. Only left and right clicks count. If a mouse tool such as USB Overdrive turns side buttons into keyboard shortcuts, Keylog ignores those too.
 
 **Isn't this a keylogger?**
 The name is a nod, but no. A keylogger records what you type. Keylog only keeps tallies: "E was pressed 4,210 times today in Notes". The text, the order and the timing between keys are never stored, and nothing ever leaves your Mac.

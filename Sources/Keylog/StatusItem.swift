@@ -69,6 +69,9 @@ final class StatusItemController: NSObject {
         Publishers.CombineLatest4(model.$today, model.$menuBarDisplay, model.$isPaused, model.$isCounting)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.render() } }
             .store(in: &subscriptions)
+        Publishers.CombineLatest(model.$liveKPM, model.$tintBySpeed)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.render() } }
+            .store(in: &subscriptions)
         model.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async {
@@ -168,10 +171,12 @@ final class StatusItemController: NSObject {
         guard let button = item.button else { return }
         let today = model.today
         // Skip the redraw when nothing visible has changed (mouse travel, say).
-        let signature = "\(model.menuBarDisplay)|\(model.isPaused)|\(model.isCounting)|\(today.keys)|"
+        let speedLevel = model.tintBySpeed ? Self.speedLevel(model.liveKPM) : nil
+        let signature = "\(model.menuBarDisplay)|\(model.isPaused)|\(model.isCounting)|\(today.keys)|\(speedLevel ?? -1)|"
             + (model.menuBarDisplay == .keysAndClicks ? Format.compact(today.clicks) : "")
         guard signature != lastRender else { return }
         lastRender = signature
+        button.contentTintColor = speedLevel.map { NSColor(Theme.heat($0)) }
         button.appearsDisabled = model.isPaused || !model.isCounting
         button.toolTip = model.isCounting
             ? "Keylog: \(Format.count(today.keys)) keys, \(Format.count(today.clicks)) clicks today"
@@ -190,6 +195,14 @@ final class StatusItemController: NSObject {
             button.image = Self.stacked(symbol: symbol, top: Format.compact(today.keys), bottom: Format.compact(today.clicks))
             button.attributedTitle = NSAttributedString()
         }
+    }
+
+    /// Heat level for a typing speed: nothing below 120 keys a minute, then green
+    /// through yellow and orange to red at 360 and up. Steps of 0.05 limit redraws.
+    private static func speedLevel(_ keysPerMinute: Int) -> Double? {
+        guard keysPerMinute >= 120 else { return nil }
+        let t = min(1, Double(keysPerMinute - 120) / 240)
+        return ((0.55 + 0.45 * t) * 20).rounded() / 20
     }
 
     private static func symbol(_ name: String) -> NSImage? {
@@ -228,6 +241,7 @@ final class PanelFeed: ObservableObject {
     @Published private(set) var isPaused = false
     @Published private(set) var isCounting = false
     @Published private(set) var widgetVisible = true
+    @Published private(set) var liveKPM = 0
     /// Bumped on every open, so the panel reloads its charts.
     @Published var openCount = 0
 
@@ -237,6 +251,7 @@ final class PanelFeed: ObservableObject {
         if isPaused != model.isPaused { isPaused = model.isPaused }
         if isCounting != model.isCounting { isCounting = model.isCounting }
         if widgetVisible != model.widget.isVisible { widgetVisible = model.widget.isVisible }
+        if liveKPM != model.liveKPM { liveKPM = model.liveKPM }
     }
 }
 

@@ -533,6 +533,44 @@ struct CalendarGrid: View {
     }
 }
 
+// MARK: - Import
+
+enum Importer {
+    /// Asks for a backup file, then whether to add it to the current data or replace it.
+    static func run(_ model: AppModel) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a Keylog backup (made with Export → Full Backup as JSON)."
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let ask = NSAlert()
+            ask.messageText = "Import “\(url.lastPathComponent)”?"
+            ask.informativeText = "Add its counts to what Keylog has now, or replace everything with the backup."
+            ask.addButton(withTitle: "Add to Current Data")
+            ask.addButton(withTitle: "Replace Current Data")
+            ask.addButton(withTitle: "Cancel")
+            let choice = ask.runModal()
+            guard choice != .alertThirdButtonReturn else { return }
+            let replace = choice == .alertSecondButtonReturn
+            if replace {
+                let confirm = NSAlert()
+                confirm.messageText = "Replace all of Keylog's data?"
+                confirm.informativeText = "Everything Keylog has now is removed and the backup takes its place. This can't be undone."
+                confirm.alertStyle = .critical
+                confirm.addButton(withTitle: "Replace")
+                confirm.addButton(withTitle: "Cancel")
+                guard confirm.runModal() == .alertFirstButtonReturn else { return }
+            }
+            try model.importBackup(data, replace: replace)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
+
 // MARK: - Export
 
 enum Exporter {

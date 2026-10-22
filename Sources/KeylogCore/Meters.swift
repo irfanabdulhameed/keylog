@@ -1,18 +1,26 @@
 import CoreGraphics
 
-/// Keys pressed in the trailing one-second window, on a monotonic clock so changing
-/// the Mac's time can't fake a burst.
+/// Events in a trailing time window, on a monotonic clock so changing the Mac's
+/// time can't fake a burst.
 public struct SpeedMeter: Sendable {
+    public let window: Double
     private var times: [Double] = []
     private var head = 0
 
-    public init() {}
+    public init(window: Double = 1) {
+        self.window = window
+    }
 
-    /// Records a key press at `uptime` seconds and returns the keys in the last second.
+    /// Records an event at `uptime` seconds and returns the events in the window.
     public mutating func tick(at uptime: Double) -> Int {
         times.append(uptime)
-        while head < times.count, times[head] <= uptime - 1 { head += 1 }
-        if head > 64 {
+        return count(at: uptime)
+    }
+
+    /// Events in the window ending at `uptime`.
+    public mutating func count(at uptime: Double) -> Int {
+        while head < times.count, times[head] <= uptime - window { head += 1 }
+        if head > 256 {
             times.removeFirst(head)
             head = 0
         }

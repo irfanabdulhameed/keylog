@@ -74,6 +74,15 @@ public final class Store: @unchecked Sendable {
         }
         sqlite3_busy_timeout(db, 2000)
         try exec(Self.schema)
+        try migrate()
+    }
+
+    /// Brings files from older versions up to date.
+    private func migrate() throws {
+        let columns = query("PRAGMA table_info(hours)", []) { text($0, 1) }
+        if !columns.contains("peak_cps") {
+            try exec("ALTER TABLE hours ADD COLUMN peak_cps INTEGER NOT NULL DEFAULT 0")
+        }
     }
 
     deinit {
@@ -93,6 +102,7 @@ public final class Store: @unchecked Sendable {
             clicks_middle INTEGER NOT NULL DEFAULT 0, clicks_other INTEGER NOT NULL DEFAULT 0,
             mouse_mm REAL NOT NULL DEFAULT 0, scroll_mm REAL NOT NULL DEFAULT 0,
             minutes_mask INTEGER NOT NULL DEFAULT 0, peak_kps INTEGER NOT NULL DEFAULT 0,
+            peak_cps INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (day, hour)
         ) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS keys (
@@ -121,8 +131,8 @@ public final class Store: @unchecked Sendable {
                 try run("""
                     INSERT INTO hours (day, hour, tz, letters, numbers, special, space, other,
                         clicks_left, clicks_right, clicks_middle, clicks_other,
-                        mouse_mm, scroll_mm, minutes_mask, peak_kps)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        mouse_mm, scroll_mm, minutes_mask, peak_kps, peak_cps)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (day, hour) DO UPDATE SET
                         letters = letters + excluded.letters, numbers = numbers + excluded.numbers,
                         special = special + excluded.special, space = space + excluded.space,
@@ -134,12 +144,14 @@ public final class Store: @unchecked Sendable {
                         mouse_mm = mouse_mm + excluded.mouse_mm,
                         scroll_mm = scroll_mm + excluded.scroll_mm,
                         minutes_mask = minutes_mask | excluded.minutes_mask,
-                        peak_kps = max(peak_kps, excluded.peak_kps)
+                        peak_kps = max(peak_kps, excluded.peak_kps),
+                        peak_cps = max(peak_cps, excluded.peak_cps)
                     """, [
                         .text(b.day), .int(b.hour), .text(b.timeZone),
                         .int(c.letters), .int(c.numbers), .int(c.special), .int(c.space), .int(c.other),
                         .int(c.clicksLeft), .int(c.clicksRight), .int(c.clicksMiddle), .int(c.clicksOther),
                         .real(c.mouseMM), .real(c.scrollMM), .int(Int(flush.minutesMask)), .int(c.peakKPS),
+                        .int(c.peakCPS),
                     ])
                 for (use, count) in flush.keys {
                     try run("""
@@ -176,7 +188,7 @@ public final class Store: @unchecked Sendable {
             query("""
                 SELECT day, hour, tz, letters, numbers, special, space, other,
                     clicks_left, clicks_right, clicks_middle, clicks_other,
-                    mouse_mm, scroll_mm, minutes_mask, peak_kps
+                    mouse_mm, scroll_mm, minutes_mask, peak_kps, peak_cps
                 FROM hours WHERE day BETWEEN ? AND ? ORDER BY day, hour
                 """, [.text(first), .text(last)]) { s in
                 var c = Counts()
@@ -189,6 +201,7 @@ public final class Store: @unchecked Sendable {
                 let mask = UInt64(sqlite3_column_int64(s, 14))
                 c.activeMinutes = mask.nonzeroBitCount
                 c.peakKPS = int(s, 15)
+                c.peakCPS = int(s, 16)
                 return HourRow(day: text(s, 0), hour: int(s, 1), timeZone: text(s, 2), counts: c, minutesMask: mask)
             }
         }
@@ -247,6 +260,102 @@ public final class Store: @unchecked Sendable {
                 }
             }
             return tables
+        }
+    }
+
+    /// Deletes one day's counts.
+    public func deleteDay(_ day: String) {
+        queue.sync {
+            do {
+                try exec("BEGIN")
+                for table in ["hours", "keys", "apps"] {
+                    try run("DELETE FROM \(table) WHERE day = ?", [.text(day)])
+                }
+                try exec("COMMIT")
+            } catch {
+                try? exec("ROLLBACK")
+                NSLog("Keylog: deleting a day failed: \(error)")
+            }
+        }
+    }
+
+    public enum ImportError: Error, LocalizedError {
+        case notABackup
+        public var errorDescription: String? { "This file isn't a Keylog backup." }
+    }
+
+    /// Restores a JSON backup made by Export. `replace` empties the file first;
+    /// otherwise the backup's counts are added to what's here. Returns rows read.
+    @discardableResult
+    public func importBackup(_ data: Data, replace: Bool) throws -> Int {
+        guard let backup = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (backup["format"] as? String)?.hasPrefix("keylog-backup-") == true,
+              let hours = backup["hours"] as? [[String: Any]] else { throw ImportError.notABackup }
+        let keys = backup["keys"] as? [[String: Any]] ?? []
+        let apps = backup["apps"] as? [[String: Any]] ?? []
+        let meta = backup["meta"] as? [[String: Any]] ?? []
+        func int(_ row: [String: Any], _ key: String) -> Int { (row[key] as? NSNumber)?.intValue ?? 0 }
+        func real(_ row: [String: Any], _ key: String) -> Double { (row[key] as? NSNumber)?.doubleValue ?? 0 }
+        func str(_ row: [String: Any], _ key: String) -> String { row[key] as? String ?? "" }
+
+        return try queue.sync {
+            try exec("BEGIN")
+            do {
+                if replace { try exec("DELETE FROM hours; DELETE FROM keys; DELETE FROM apps; DELETE FROM meta WHERE key = 'first_day';") }
+                for row in hours {
+                    try run("""
+                        INSERT INTO hours (day, hour, tz, letters, numbers, special, space, other,
+                            clicks_left, clicks_right, clicks_middle, clicks_other,
+                            mouse_mm, scroll_mm, minutes_mask, peak_kps, peak_cps)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (day, hour) DO UPDATE SET
+                            letters = letters + excluded.letters, numbers = numbers + excluded.numbers,
+                            special = special + excluded.special, space = space + excluded.space,
+                            other = other + excluded.other,
+                            clicks_left = clicks_left + excluded.clicks_left,
+                            clicks_right = clicks_right + excluded.clicks_right,
+                            clicks_middle = clicks_middle + excluded.clicks_middle,
+                            clicks_other = clicks_other + excluded.clicks_other,
+                            mouse_mm = mouse_mm + excluded.mouse_mm, scroll_mm = scroll_mm + excluded.scroll_mm,
+                            minutes_mask = minutes_mask | excluded.minutes_mask,
+                            peak_kps = max(peak_kps, excluded.peak_kps), peak_cps = max(peak_cps, excluded.peak_cps)
+                        """, [
+                            .text(str(row, "day")), .int(int(row, "hour")), .text(str(row, "tz")),
+                            .int(int(row, "letters")), .int(int(row, "numbers")), .int(int(row, "special")),
+                            .int(int(row, "space")), .int(int(row, "other")),
+                            .int(int(row, "clicks_left")), .int(int(row, "clicks_right")),
+                            .int(int(row, "clicks_middle")), .int(int(row, "clicks_other")),
+                            .real(real(row, "mouse_mm")), .real(real(row, "scroll_mm")),
+                            .int(int(row, "minutes_mask")), .int(int(row, "peak_kps")), .int(int(row, "peak_cps")),
+                        ])
+                }
+                for row in keys {
+                    try run("""
+                        INSERT INTO keys (day, app, key, count) VALUES (?, ?, ?, ?)
+                        ON CONFLICT (day, app, key) DO UPDATE SET count = count + excluded.count
+                        """, [.text(str(row, "day")), .text(str(row, "app")), .int(int(row, "key")), .int(int(row, "count"))])
+                }
+                for row in apps {
+                    try run("""
+                        INSERT INTO apps (day, app, name, keys, clicks, scroll_mm) VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (day, app) DO UPDATE SET name = excluded.name,
+                            keys = keys + excluded.keys, clicks = clicks + excluded.clicks,
+                            scroll_mm = scroll_mm + excluded.scroll_mm
+                        """, [.text(str(row, "day")), .text(str(row, "app")), .text(str(row, "name")),
+                              .int(int(row, "keys")), .int(int(row, "clicks")), .real(real(row, "scroll_mm"))])
+                }
+                if let first = meta.first(where: { str($0, "key") == "first_day" }).map({ str($0, "value") }), !first.isEmpty {
+                    try run("""
+                        INSERT INTO meta (key, value) VALUES ('first_day', ?)
+                        ON CONFLICT (key) DO UPDATE SET value = min(value, excluded.value)
+                        """, [.text(first)])
+                }
+                try exec("COMMIT")
+            } catch {
+                try? exec("ROLLBACK")
+                throw error
+            }
+            return hours.count + keys.count + apps.count
         }
     }
 

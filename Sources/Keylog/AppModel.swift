@@ -36,6 +36,23 @@ final class AppModel: ObservableObject {
         didSet { if !Snapshot.isRendering { widget.save() } }
     }
     @Published var isMovingWidget = false
+    /// Typing speed right now, in keys per minute; refreshed every second.
+    @Published private(set) var liveKPM = 0
+    @Published var tintBySpeed = Preferences.tintBySpeed {
+        didSet { Preferences.tintBySpeed = tintBySpeed }
+    }
+    @Published var keyMilestone = Preferences.keyMilestone {
+        didSet {
+            Preferences.keyMilestone = keyMilestone
+            if keyMilestone > 0 { Milestones.requestPermission() }
+        }
+    }
+    @Published var clickMilestone = Preferences.clickMilestone {
+        didSet {
+            Preferences.clickMilestone = clickMilestone
+            if clickMilestone > 0 { Milestones.requestPermission() }
+        }
+    }
     /// Every keyboard type seen, and whether its keys count.
     @Published var keyboards = Preferences.keyboards {
         didSet {
@@ -61,6 +78,8 @@ final class AppModel: ObservableObject {
         keyboards.sort { $0.type > $1.type }
     }
     private var updateScheduled = false
+    private var liveTimer: Timer?
+    private let milestones = Milestones()
     private var lastPublish = Date.distantPast
 
     init(store: Store, recorder: Recorder) {
@@ -104,6 +123,21 @@ final class AppModel: ObservableObject {
             lastPublish = now
         }
         if todayKeys != recorder.todayKeys { todayKeys = recorder.todayKeys }
+        if !Snapshot.isRendering {
+            let top = todayKeys.max { $0.value < $1.value }.map { KeyNames.name($0.key) }
+            milestones.check(latest, day: recorder.currentDay, keyStep: keyMilestone, clickStep: clickMilestone, topKey: top)
+        }
+    }
+
+    /// Refreshes the live typing speed once a second.
+    func startLiveUpdates() {
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let speed = recorder.liveKeysPerMinute()
+            if speed != liveKPM { liveKPM = speed }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        liveTimer = timer
     }
 
     /// Stats for a period, including counts not yet written to disk.
@@ -155,6 +189,24 @@ final class AppModel: ObservableObject {
 
     func deleteAllData() {
         store.deleteAll()
+        dataChanged()
+    }
+
+    /// Starts today again from zero. Earlier days are kept.
+    func resetToday() {
+        recorder.flush(wait: true)
+        store.deleteDay(recorder.currentDay)
+        dataChanged()
+    }
+
+    func importBackup(_ data: Data, replace: Bool) throws {
+        recorder.flush(wait: true)
+        try store.importBackup(data, replace: replace)
+        dataChanged()
+    }
+
+    /// Reloads everything after the stored data changed underneath.
+    private func dataChanged() {
         recorder.reset()
         refreshFirstDay()
         publish()
@@ -244,6 +296,22 @@ enum Preferences {
         set {
             if let data = try? JSONEncoder().encode(newValue) { defaults.set(data, forKey: "keyboards") }
         }
+    }
+
+    static var tintBySpeed: Bool {
+        get { defaults.bool(forKey: "tintBySpeed") }
+        set { defaults.set(newValue, forKey: "tintBySpeed") }
+    }
+
+    /// Keys between milestone notifications; 0 is off.
+    static var keyMilestone: Int {
+        get { defaults.object(forKey: "keyMilestone") as? Int ?? 0 }
+        set { defaults.set(newValue, forKey: "keyMilestone") }
+    }
+
+    static var clickMilestone: Int {
+        get { defaults.object(forKey: "clickMilestone") as? Int ?? 0 }
+        set { defaults.set(newValue, forKey: "clickMilestone") }
     }
 
     static var weekStart: WeekStart {

@@ -84,7 +84,7 @@ public final class InputProcessor {
             pendingTap = nil
             // Only real clicks: side and wheel buttons are for navigating, not clicking.
             guard button == .left || button == .right else { return }
-            recorder.recordClick(button, at: date)
+            recorder.recordClick(button, at: date, uptime: uptime)
 
         case let .move(point):
             guard tracksMouse else { return }

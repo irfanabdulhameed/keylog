@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SQLite3
 import Testing
 @testable import KeylogCore
 
@@ -316,5 +317,79 @@ private final class Rig {
         rig.recorder.flush(wait: true)
         #expect(rig.store.apps(from: "2026-10-21", through: "2026-10-21").isEmpty)
         #expect(rig.store.keyCounts(from: "2026-10-21", through: "2026-10-21") == [0: 1])
+    }
+}
+
+@Suite struct ParityTests {
+    @Test func clicksPerSecondPeak() throws {
+        let rig = try Rig()
+        for _ in 0..<4 { rig.send(.click(.left), after: 0.1) }
+        rig.send(.click(.right), after: 2)
+        #expect(rig.recorder.today.peakCPS == 4)
+        #expect(rig.saved("2026-10-21").peakCPS == 4)
+    }
+
+    @Test func liveTypingSpeed() throws {
+        let rig = try Rig()
+        for _ in 0..<5 { rig.key(0, "a", after: 0.5) }
+        #expect(rig.recorder.liveKeysPerMinute(at: rig.uptime) == 30)  // 5 keys in 10 s
+        #expect(rig.recorder.liveKeysPerMinute(at: rig.uptime + 11) == 0)
+    }
+
+    @Test func resetOneDay() throws {
+        let rig = try Rig(start: "2026-10-21 23:59:00")
+        rig.key(0, "a")
+        rig.key(0, "a", after: 70)  // next day
+        rig.recorder.flush(wait: true)
+        rig.store.deleteDay("2026-10-22")
+        rig.recorder.reset(now: rig.now)
+        #expect(rig.recorder.today.keys == 0)
+        #expect(rig.store.totals(day: "2026-10-21").keys == 1)
+    }
+
+    @Test func importReplacesOrAdds() throws {
+        let source = try Rig()
+        source.key(0, "a")
+        source.send(.click(.left))
+        source.recorder.flush(wait: true)
+        var backup: [String: Any] = source.store.backup()
+        backup["format"] = "keylog-backup-1"
+        let data = try JSONSerialization.data(withJSONObject: backup)
+
+        let target = try Rig()
+        target.key(18, "1")
+        target.recorder.flush(wait: true)
+        try target.store.importBackup(data, replace: true)
+        #expect(target.store.totals(day: "2026-10-21").keys == 1)
+        #expect(target.store.totals(day: "2026-10-21").letters == 1)
+        try target.store.importBackup(data, replace: false)
+        #expect(target.store.totals(day: "2026-10-21").letters == 2)
+        #expect(target.store.keyCounts(from: "2026-10-21", through: "2026-10-21")[0] == 2)
+        #expect(target.store.firstDay() == "2026-10-21")
+        #expect(throws: Store.ImportError.self) { try target.store.importBackup(Data("{}".utf8), replace: false) }
+    }
+
+    @Test func upgradesOldFiles() throws {
+        let path = temporaryStorePath()
+        var db: OpaquePointer?
+        sqlite3_open(path, &db)
+        sqlite3_exec(db, """
+            CREATE TABLE hours (day TEXT NOT NULL, hour INTEGER NOT NULL, tz TEXT NOT NULL,
+                letters INTEGER NOT NULL DEFAULT 0, numbers INTEGER NOT NULL DEFAULT 0,
+                special INTEGER NOT NULL DEFAULT 0, space INTEGER NOT NULL DEFAULT 0,
+                other INTEGER NOT NULL DEFAULT 0, clicks_left INTEGER NOT NULL DEFAULT 0,
+                clicks_right INTEGER NOT NULL DEFAULT 0, clicks_middle INTEGER NOT NULL DEFAULT 0,
+                clicks_other INTEGER NOT NULL DEFAULT 0, mouse_mm REAL NOT NULL DEFAULT 0,
+                scroll_mm REAL NOT NULL DEFAULT 0, minutes_mask INTEGER NOT NULL DEFAULT 0,
+                peak_kps INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, hour)) WITHOUT ROWID;
+            INSERT INTO hours (day, hour, tz, letters) VALUES ('2026-10-20', 9, 'Asia/Kolkata', 7);
+            """, nil, nil, nil)
+        sqlite3_close(db)
+        let rig = try Rig(start: "2026-10-21 10:00:00", path: path)
+        rig.send(.click(.left))
+        rig.send(.click(.left), after: 0.1)
+        rig.recorder.flush(wait: true)
+        #expect(rig.store.totals(day: "2026-10-20").letters == 7)
+        #expect(rig.store.totals(day: "2026-10-21").peakCPS == 2)
     }
 }

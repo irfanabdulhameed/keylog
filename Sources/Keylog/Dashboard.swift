@@ -312,7 +312,9 @@ struct OverviewSection: View {
     let period: Period
     let reload: ReloadID
     @State private var stats: PeriodStats?
-    @State private var stacked = true
+    /// "group", "total" or "line".
+    @AppStorage("overviewChart") private var chartMode = "group"
+    @State private var deletes = 0
 
     var body: some View {
         let stats = stats ?? PeriodStats(period: period)
@@ -348,9 +350,10 @@ struct OverviewSection: View {
                     HStack {
                         Text(chartTitle).font(.headline)
                         Spacer()
-                        Picker("Bars", selection: $stacked) {
-                            Text("By group").tag(true)
-                            Text("Total").tag(false)
+                        Picker("Chart", selection: $chartMode) {
+                            Text("By group").tag("group")
+                            Text("Total").tag("total")
+                            Text("Line").tag("line")
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
@@ -361,7 +364,9 @@ struct OverviewSection: View {
                                    ? "Start typing. Today's count appears here."
                                    : "Nothing was counted in this period.")
                     } else {
-                        ActivityChart(stats: stats, stacked: stacked, metric: .keys) { slot in drill(into: slot) }
+                        ActivityChart(stats: stats, stacked: chartMode == "group", metric: .keys, line: chartMode == "line") { slot in
+                            drill(into: slot)
+                        }
                             .frame(height: 240)
                     }
                 }
@@ -404,8 +409,14 @@ struct OverviewSection: View {
                     }
                 }
             }
+
+            InsightsCard(stats: stats, deletes: deletes, calendar: model.calendar)
         }
-        .task(id: reload) { self.stats = model.stats(for: period) }
+        .task(id: reload) {
+            self.stats = model.stats(for: period)
+            let keys = model.keyCounts(for: period, app: nil)
+            deletes = (keys[51] ?? 0) + (keys[117] ?? 0)
+        }
     }
 
     private var chartTitle: String {
@@ -484,6 +495,8 @@ struct ActivityChart: View {
     let stats: PeriodStats
     let stacked: Bool
     let metric: HistoryMetric
+    /// A line through the totals instead of bars.
+    var line = false
     var onSelect: (ChartSlot) -> Void = { _ in }
     @State private var hovered: Int?
 
@@ -492,7 +505,21 @@ struct ActivityChart: View {
         Chart {
             ForEach(stats.slots) { slot in
                 let counts = stats.slotCounts[slot.index]
-                if stacked && metric == .keys {
+                if line {
+                    AreaMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                        .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.28), Color.accentColor.opacity(0)],
+                                                        startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.catmullRom)
+                    LineMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                        .foregroundStyle(Color.accentColor)
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    if hovered == slot.index {
+                        PointMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                            .foregroundStyle(Color.accentColor)
+                            .symbolSize(60)
+                    }
+                } else if stacked && metric == .keys {
                     ForEach(KeyGroup.allCases, id: \.self) { group in
                         BarMark(x: .value("Time", slot.start, unit: unit.component),
                                 y: .value("Keys", counts[group]))
@@ -509,7 +536,7 @@ struct ActivityChart: View {
         }
         .onChange(of: stats.period) { hovered = nil }
         .chartForegroundStyleScale(domain: KeyGroup.allCases.map(Theme.name), range: KeyGroup.allCases.map(Theme.color))
-        .chartLegend(stacked && metric == .keys ? .visible : .hidden)
+        .chartLegend(stacked && metric == .keys && !line ? .visible : .hidden)
         .chartXAxis { xAxis(unit) }
         .chartYAxis {
             AxisMarks(position: .leading) { value in
@@ -615,6 +642,7 @@ struct MouseSection: View {
     let reload: ReloadID
     @State private var stats: PeriodStats?
     @State private var metric = HistoryMetric.clicks
+    @AppStorage("mouseChartLine") private var line = false
 
     var body: some View {
         let stats = stats ?? PeriodStats(period: period)
@@ -645,11 +673,19 @@ struct MouseSection: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .fixedSize()
+                        Picker("Style", selection: $line) {
+                            Image(systemName: "chart.bar.fill").tag(false)
+                            Image(systemName: "chart.xyaxis.line").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .help("Bars or line")
                     }
                     if metric.value(total) == 0 {
                         EmptyChart(message: "Nothing was counted in this period.")
                     } else {
-                        ActivityChart(stats: stats, stacked: false, metric: metric)
+                        ActivityChart(stats: stats, stacked: false, metric: metric, line: line)
                             .frame(height: 220)
                     }
                 }
@@ -719,5 +755,131 @@ struct Banner: View {
         }
         .padding(12)
         .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+// MARK: - Insights
+
+/// A few standout facts about the period: best day or hour, the busiest weekday,
+/// how often Delete gets pressed, the fastest clicking, and fun distances.
+struct InsightsCard: View {
+    let stats: PeriodStats
+    let deletes: Int
+    let calendar: Calendar
+
+    private struct Insight {
+        let icon: String
+        let title: String
+        let value: String
+        let detail: String
+    }
+
+    var body: some View {
+        let items = insights
+        if !items.isEmpty {
+            Card {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Insights").font(.headline)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)],
+                              alignment: .leading, spacing: 16) {
+                        ForEach(items, id: \.title) { item in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title).font(.caption).foregroundStyle(.secondary)
+                                    Text(item.value).font(.body.weight(.semibold)).monospacedDigit()
+                                    Text(item.detail).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var insights: [Insight] {
+        let total = stats.total
+        guard total.keys + total.clicks > 0 else { return [] }
+        var list: [Insight] = []
+        if stats.period.kind == .day {
+            if let busiest = stats.slots.indices.max(by: { stats.slotCounts[$0].keys < stats.slotCounts[$1].keys }),
+               stats.slotCounts[busiest].keys > 0 {
+                list.append(Insight(icon: "clock", title: "Busiest hour",
+                                    value: PeriodTitle.slot(stats.slots[busiest], unit: .hour),
+                                    detail: "\(Format.count(stats.slotCounts[busiest].keys)) keys"))
+            }
+        } else if let best = stats.dailyTotals.max(by: { $0.value.keys < $1.value.keys }), best.value.keys > 0 {
+            list.append(Insight(icon: "flame", title: "Best day", value: dayTitle(best.key),
+                                detail: "\(Format.count(best.value.keys)) keys"))
+        }
+        if let weekday = busiestWeekday {
+            list.append(weekday)
+        }
+        if total.keys > 0, deletes > 0 {
+            list.append(Insight(icon: "delete.left", title: "Corrections", value: Format.percent(deletes, of: total.keys),
+                                detail: "of your keys were Delete (\(Format.count(deletes)))"))
+        }
+        if total.peakCPS > 0 {
+            list.append(Insight(icon: "cursorarrow.click.badge.clock", title: "Fastest clicking",
+                                value: "\(total.peakCPS) clicks in a second", detail: "your quickest burst"))
+        }
+        if total.mouseMM > 0 {
+            list.append(Insight(icon: "figure.run", title: "Mouse travel", value: Format.distance(mm: total.mouseMM),
+                                detail: Self.travelComparison(mm: total.mouseMM)))
+        }
+        if total.scrollMM > 0 {
+            list.append(Insight(icon: "arrow.up.and.down", title: "Scrolled", value: Format.distance(mm: total.scrollMM),
+                                detail: Self.heightComparison(mm: total.scrollMM)))
+        }
+        return list
+    }
+
+    /// The weekday with the highest average, once there are at least 7 days to compare.
+    private var busiestWeekday: Insight? {
+        let days = stats.dailyTotals.filter { $0.value.keys > 0 }
+        guard days.count >= 7 else { return nil }
+        var sums: [Int: (keys: Int, days: Int)] = [:]
+        for (day, counts) in days {
+            guard let date = date(day) else { continue }
+            let weekday = calendar.component(.weekday, from: date)
+            sums[weekday, default: (0, 0)].keys += counts.keys
+            sums[weekday, default: (0, 0)].days += 1
+        }
+        guard let best = sums.max(by: { $0.value.keys / $0.value.days < $1.value.keys / $1.value.days }) else { return nil }
+        return Insight(icon: "calendar.badge.clock", title: "Most active day",
+                       value: calendar.weekdaySymbols[best.key - 1] + "s",
+                       detail: "≈ \(Format.count(best.value.keys / best.value.days)) keys on average")
+    }
+
+    private func date(_ day: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: day)
+    }
+
+    private func dayTitle(_ day: String) -> String {
+        date(day)?.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) ?? day
+    }
+
+    static func travelComparison(mm: Double) -> String {
+        let metres = mm / 1000
+        if metres >= 4219.5 { return String(format: "≈ %.1f marathons", metres / 42195) }
+        if metres >= 105 { return String(format: "≈ %.1f football pitches", metres / 105) }
+        return "≈ \(max(1, Int((metres / 105 * 100).rounded())))% of a football pitch"
+    }
+
+    static func heightComparison(mm: Double) -> String {
+        let metres = mm / 1000
+        if metres >= 884.8 { return String(format: "≈ %.1f times up Everest", metres / 8848) }
+        if metres >= 33 { return String(format: "≈ %.1f Eiffel Towers", metres / 330) }
+        return "≈ \(max(1, Int((metres / 3).rounded()))) storeys of a building"
     }
 }

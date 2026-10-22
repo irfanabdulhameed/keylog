@@ -1,7 +1,8 @@
 import AppKit
 import KeylogCore
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var model: AppModel!
     private var processor: InputProcessor!
     private let tap = EventTap()
@@ -64,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(model: model, actions: actions)
         widget.actions = actions
 
+        UNUserNotificationCenter.current().delegate = self
+        model.startLiveUpdates()
         startCounting()
         observeSystem()
         handleTerminationSignal()
@@ -82,6 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model?.recorder.flush(wait: true)
+    }
+
+    /// Show milestone notifications even though Keylog counts as the active app.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 
     /// Reopening Keylog from Finder or Spotlight opens the dashboard.
