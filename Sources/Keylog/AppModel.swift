@@ -44,12 +44,14 @@ final class AppModel: ObservableObject {
     @Published var keyMilestone = Preferences.keyMilestone {
         didSet {
             Preferences.keyMilestone = keyMilestone
+            milestones.rebase(recorder.today, day: recorder.currentDay)
             if keyMilestone > 0 { Milestones.requestPermission() }
         }
     }
     @Published var clickMilestone = Preferences.clickMilestone {
         didSet {
             Preferences.clickMilestone = clickMilestone
+            milestones.rebase(recorder.today, day: recorder.currentDay)
             if clickMilestone > 0 { Milestones.requestPermission() }
         }
     }

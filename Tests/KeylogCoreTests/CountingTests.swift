@@ -393,3 +393,30 @@ private final class Rig {
         #expect(rig.store.totals(day: "2026-10-21").peakCPS == 2)
     }
 }
+
+@Suite struct MilestoneTests {
+    @Test func firesOncePerMilestone() {
+        var tracker = MilestoneTracker()
+        #expect(tracker.check(keys: 9_000, clicks: 0, day: "d1", keyStep: 10_000, clickStep: 0) == (nil, nil))  // first look: baseline
+        #expect(tracker.check(keys: 9_999, clicks: 0, day: "d1", keyStep: 10_000, clickStep: 0).keys == nil)
+        #expect(tracker.check(keys: 10_001, clicks: 0, day: "d1", keyStep: 10_000, clickStep: 0).keys == 10_000)
+        #expect(tracker.check(keys: 10_500, clicks: 0, day: "d1", keyStep: 10_000, clickStep: 0).keys == nil)
+        #expect(tracker.check(keys: 31_000, clicks: 0, day: "d1", keyStep: 10_000, clickStep: 0).keys == 30_000)
+    }
+
+    @Test func offNeverFiresAndNewDayStartsFresh() {
+        var tracker = MilestoneTracker()
+        _ = tracker.check(keys: 0, clicks: 0, day: "d1", keyStep: 0, clickStep: 0)
+        #expect(tracker.check(keys: 50_000, clicks: 9_000, day: "d1", keyStep: 0, clickStep: 0) == (nil, nil))
+        #expect(tracker.check(keys: 12_000, clicks: 0, day: "d2", keyStep: 10_000, clickStep: 0) == (nil, nil))  // passed before watching
+        #expect(tracker.check(keys: 20_000, clicks: 1_200, day: "d2", keyStep: 10_000, clickStep: 1_000) == (20_000, 1_000))
+    }
+
+    @Test func rebaseSkipsCountsAlreadyPassed() {
+        var tracker = MilestoneTracker()
+        _ = tracker.check(keys: 0, clicks: 0, day: "d1", keyStep: 0, clickStep: 0)
+        tracker.rebase(keys: 26_000, clicks: 0, day: "d1")  // milestone switched on at 26,000
+        #expect(tracker.check(keys: 27_000, clicks: 0, day: "d1", keyStep: 5_000, clickStep: 0).keys == nil)
+        #expect(tracker.check(keys: 30_100, clicks: 0, day: "d1", keyStep: 5_000, clickStep: 0).keys == 30_000)
+    }
+}

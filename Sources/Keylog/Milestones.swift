@@ -2,18 +2,14 @@ import Foundation
 import KeylogCore
 import UserNotifications
 
-/// Posts a notification each time today's keys or clicks pass a milestone, like
-/// every 10,000 keys. Never for milestones passed before Keylog was watching.
+/// Posts a notification each time today's keys or clicks pass a milestone.
 final class Milestones {
-    private let defaults = UserDefaults.standard
-    private var day: String?
-    private var lastKeys = 0
-    private var lastClicks = 0
+    private static let key = "milestones"
+    private var tracker: MilestoneTracker
 
     init() {
-        day = defaults.string(forKey: "milestoneDay")
-        lastKeys = defaults.integer(forKey: "milestoneKeys")
-        lastClicks = defaults.integer(forKey: "milestoneClicks")
+        tracker = UserDefaults.standard.data(forKey: Self.key)
+            .flatMap { try? JSONDecoder().decode(MilestoneTracker.self, from: $0) } ?? MilestoneTracker()
     }
 
     static func requestPermission() {
@@ -21,43 +17,28 @@ final class Milestones {
     }
 
     func check(_ today: Counts, day: String, keyStep: Int, clickStep: Int, topKey: String?) {
-        if day != self.day {
-            // A new day, or the first run: start from what's already counted.
-            self.day = day
-            lastKeys = today.keys
-            lastClicks = today.clicks
-            save()
-            return
-        }
-        if crossed(today.keys, since: &lastKeys, step: keyStep) {
+        let before = tracker
+        let passed = tracker.check(keys: today.keys, clicks: today.clicks, day: day, keyStep: keyStep, clickStep: clickStep)
+        if tracker != before { save() }
+        if let keys = passed.keys {
             let speed = today.activeMinutes > 0 ? "\(Int(today.keysPerActiveMinute.rounded())) keys a minute while typing" : nil
             let top = topKey.map { "busiest key: \($0)" }
-            post("\(Format.count(today.keys / keyStep * keyStep)) keys today",
-                 body: [speed, top].compactMap { $0 }.joined(separator: ", ").capitalizedFirst)
+            post("\(Format.count(keys)) keys today", body: [speed, top].compactMap { $0 }.joined(separator: ", ").capitalizedFirst)
         }
-        if crossed(today.clicks, since: &lastClicks, step: clickStep) {
-            post("\(Format.count(today.clicks / clickStep * clickStep)) clicks today",
+        if let clicks = passed.clicks {
+            post("\(Format.count(clicks)) clicks today",
                  body: "Left \(Format.count(today.clicksLeft)), right \(Format.count(today.clicksRight)).")
         }
     }
 
-    /// Whether `value` passed a multiple of `step` since the last check. While a
-    /// milestone is off, the baseline follows along, so turning it on doesn't fire.
-    private func crossed(_ value: Int, since last: inout Int, step: Int) -> Bool {
-        guard step > 0 else {
-            if last != value { last = value; save() }
-            return false
-        }
-        guard value / step > last / step else { return false }
-        last = value
+    /// Starts from today's counts, so a newly chosen milestone doesn't fire for counts already passed.
+    func rebase(_ today: Counts, day: String) {
+        tracker.rebase(keys: today.keys, clicks: today.clicks, day: day)
         save()
-        return true
     }
 
     private func save() {
-        defaults.set(day, forKey: "milestoneDay")
-        defaults.set(lastKeys, forKey: "milestoneKeys")
-        defaults.set(lastClicks, forKey: "milestoneClicks")
+        if let data = try? JSONEncoder().encode(tracker) { UserDefaults.standard.set(data, forKey: Self.key) }
     }
 
     private func post(_ title: String, body: String) {
