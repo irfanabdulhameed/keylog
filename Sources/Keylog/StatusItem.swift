@@ -10,6 +10,7 @@ struct AppActions {
     var allowAccess: () -> Void = {}
     var moveWidget: () -> Void = {}
     var checkForUpdates: () -> Void = {}
+    var customizeKeyboard: () -> Void = {}
     var quit: () -> Void = { NSApp.terminate(nil) }
 }
 

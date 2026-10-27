@@ -139,7 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 self?.model.widget.isVisible = true
                 self?.model.isMovingWidget = true
             },
-            checkForUpdates: { [weak self] in MainActor.assumeIsolated { self?.updates.checkManually() } })
+            checkForUpdates: { [weak self] in MainActor.assumeIsolated { self?.updates.checkManually() } },
+            customizeKeyboard: { [weak self] in self?.dashboard.customizeKeyboard() })
     }
 
     /// Starts the event tap, or asks for permission when macOS hasn't given it yet.

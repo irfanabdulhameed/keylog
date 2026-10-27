@@ -129,7 +129,12 @@ struct GeneralSettings: View {
                 Picker("Weeks start on", selection: $model.weekStart) {
                     ForEach(WeekStart.allCases) { Text($0.title).tag($0) }
                 }
-                HeatStylePicker(style: $heatStyle)
+                LabeledContent("Keyboard heatmap") {
+                    HStack(spacing: 10) {
+                        Text(heatStyle.title).foregroundStyle(.secondary)
+                        Button("Customize Keyboard…", action: actions.customizeKeyboard)
+                    }
+                }
             }
             Section("Updates") {
                 Toggle("Check for updates automatically", isOn: $model.checksForUpdates)

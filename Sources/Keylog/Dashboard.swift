@@ -50,6 +50,8 @@ final class DashboardState: ObservableObject {
     @Published var tick = 0
     var openSettings: () -> Void = {}
     var checkForUpdates: () -> Void = {}
+    /// The Customize Keyboard page is open.
+    @Published var customizingKeyboard = false
 }
 
 /// Owns the dashboard window. Closing it frees everything it held.
@@ -98,6 +100,12 @@ final class DashboardController: NSObject, NSWindowDelegate {
         MainActor.assumeIsolated { DockPresence.show(.dashboard) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Opens the Keyboard view with the Customize Keyboard page on it.
+    func customizeKeyboard() {
+        show(.keyboard)
+        state.customizingKeyboard = true
     }
 
     func windowWillClose(_ notification: Notification) {
