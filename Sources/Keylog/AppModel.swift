@@ -41,6 +41,13 @@ final class AppModel: ObservableObject {
     @Published var tintBySpeed = Preferences.tintBySpeed {
         didSet { Preferences.tintBySpeed = tintBySpeed }
     }
+    /// Off until the user switches it on: the only thing that takes Keylog online by itself.
+    @Published var checksForUpdates = Preferences.checksForUpdates {
+        didSet {
+            Preferences.checksForUpdates = checksForUpdates
+            onUpdatesChange(checksForUpdates)
+        }
+    }
     @Published var keyMilestone = Preferences.keyMilestone {
         didSet {
             Preferences.keyMilestone = keyMilestone
@@ -68,6 +75,7 @@ final class AppModel: ObservableObject {
     let store: Store
     let recorder: Recorder
     var onPauseChange: (Bool) -> Void = { _ in }
+    var onUpdatesChange: (Bool) -> Void = { _ in }
     var onTrackMouseChange: (Bool) -> Void = { _ in }
     var onKeyboardsChange: (Set<Int>) -> Void = { _ in }
 
@@ -303,6 +311,11 @@ enum Preferences {
     static var tintBySpeed: Bool {
         get { defaults.bool(forKey: "tintBySpeed") }
         set { defaults.set(newValue, forKey: "tintBySpeed") }
+    }
+
+    static var checksForUpdates: Bool {
+        get { defaults.bool(forKey: "checksForUpdates") }
+        set { defaults.set(newValue, forKey: "checksForUpdates") }
     }
 
     /// Keys between milestone notifications; 0 is off.

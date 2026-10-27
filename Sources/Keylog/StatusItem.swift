@@ -9,6 +9,7 @@ struct AppActions {
     var openSettings: () -> Void = {}
     var allowAccess: () -> Void = {}
     var moveWidget: () -> Void = {}
+    var checkForUpdates: () -> Void = {}
     var quit: () -> Void = { NSApp.terminate(nil) }
 }
 
@@ -398,6 +399,7 @@ enum KeylogMenu {
         }
         add(model.isPaused ? "Resume Counting" : "Pause Counting") { model.isPaused.toggle() }
         add("Settings…", ",") { actions.openSettings() }
+        add("Check for Updates…") { actions.checkForUpdates() }
         menu.addItem(.separator())
         add("Quit Keylog", "q") { actions.quit() }
         return menu

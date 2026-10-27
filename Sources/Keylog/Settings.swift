@@ -18,7 +18,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     /// Each tab's window height; the window resizes as you switch tabs.
     var height: CGFloat {
         switch self {
-        case .general: 700
+        case .general: 820
         case .widget: 660
         case .tracking: 520
         case .data: 480
@@ -27,7 +27,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     func content(model: AppModel, actions: AppActions) -> AnyView {
         switch self {
-        case .general: AnyView(GeneralSettings(model: model))
+        case .general: AnyView(GeneralSettings(model: model, actions: actions))
         case .widget: AnyView(WidgetSettings(model: model, actions: actions))
         case .tracking: AnyView(TrackingSettings(model: model))
         case .data: AnyView(DataSettings(model: model))
@@ -88,6 +88,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
 struct GeneralSettings: View {
     @ObservedObject var model: AppModel
+    let actions: AppActions
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -126,6 +127,17 @@ struct GeneralSettings: View {
             Section("Dashboard") {
                 Picker("Weeks start on", selection: $model.weekStart) {
                     ForEach(WeekStart.allCases) { Text($0.title).tag($0) }
+                }
+            }
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: $model.checksForUpdates)
+                Text("Off until you switch it on. Then Keylog asks GitHub for its list of releases about every 6 hours, on Wi-Fi or Ethernet only. The request says which version you have and nothing else: no counts, keys or app names.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Text(AppVersion.text).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Check Now", action: actions.checkForUpdates)
                 }
             }
             Section("Counting rules") {

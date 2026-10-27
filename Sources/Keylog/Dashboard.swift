@@ -49,6 +49,7 @@ final class DashboardState: ObservableObject {
     /// Bumped every 15 seconds while the window is open, so current periods stay live.
     @Published var tick = 0
     var openSettings: () -> Void = {}
+    var checkForUpdates: () -> Void = {}
 }
 
 /// Owns the dashboard window. Closing it frees everything it held.
@@ -58,9 +59,10 @@ final class DashboardController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var timer: Timer?
 
-    init(model: AppModel, openSettings: @escaping () -> Void) {
+    init(model: AppModel, openSettings: @escaping () -> Void, checkForUpdates: @escaping () -> Void) {
         self.model = model
         state.openSettings = openSettings
+        state.checkForUpdates = checkForUpdates
     }
 
     func show(_ section: DashboardSection) {
@@ -91,11 +93,15 @@ final class DashboardController: NSObject, NSWindowDelegate {
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
         }
+        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
+        // While it's open, Keylog is in the Dock and ⌘-Tab.
+        MainActor.assumeIsolated { DockPresence.show(.dashboard) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
+        MainActor.assumeIsolated { DockPresence.hide(.dashboard) }
         timer?.invalidate()
         timer = nil
         window?.contentViewController = nil
@@ -157,6 +163,7 @@ struct DashboardView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+            .safeAreaInset(edge: .bottom, spacing: 0) { AboutBlock(checkForUpdates: state.checkForUpdates) }
         } detail: {
             detail(period)
         }
@@ -172,6 +179,45 @@ struct DashboardView: View {
         case .mouse: MouseSection(model: model, state: state, period: period, reload: reload)
         case .calendar: CalendarSection(model: model, state: state, reload: reload)
         }
+    }
+}
+
+/// The icon, name, version and Check for Updates at the bottom of the sidebar.
+private struct AboutBlock: View {
+    let checkForUpdates: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Keylog").font(.system(size: 12, weight: .semibold))
+                Text(AppVersion.text)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Button("Check for Updates", action: checkForUpdates)
+                    .controlSize(.small)
+                    .help("Ask GitHub whether a newer Keylog is out")
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// "Version 1.0.0 (3)", or "Development build" for a bare binary.
+enum AppVersion {
+    static var text: String {
+        let info = Bundle.main.infoDictionary
+        guard let short = info?["CFBundleShortVersionString"] as? String else { return "Development build" }
+        return "Version \(short)" + ((info?["CFBundleVersion"] as? String).map { " (\($0))" } ?? "")
     }
 }
 

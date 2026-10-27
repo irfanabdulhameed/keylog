@@ -12,10 +12,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var dashboard: DashboardController!
     private var settings: SettingsController!
     private var onboarding: OnboardingWindow?
+    private var updates: UpdateController!
     private var flushTimer: Timer?
     private var terminationSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The updater's debug commands run on their own and quit, beside a running Keylog.
+        if UpdateDebug.run(CommandLine.arguments) { return }
         guard isOnlyCopy() else {
             NSApp.terminate(nil)
             return
@@ -60,8 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         model.onKeyboardsChange = { [tap] ignored in tap.ignoredKeyboards = ignored }
 
+        updates = UpdateController(reduceMotion: { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion })
+        model.onUpdatesChange = { [weak self] on in MainActor.assumeIsolated { self?.updates.setAutomatic(on) } }
         settings = SettingsController(model: model) { [unowned self] in self.actions }
-        dashboard = DashboardController(model: model) { [weak self] in self?.settings.show() }
+        dashboard = DashboardController(model: model, openSettings: { [weak self] in self?.settings.show() },
+                                        checkForUpdates: { [weak self] in MainActor.assumeIsolated { self?.updates.checkManually() } })
         statusItem = StatusItemController(model: model, actions: actions)
         widget.actions = actions
 
@@ -70,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         startCounting()
         observeSystem()
         handleTerminationSignal()
+        updates.setAutomatic(model.checksForUpdates)
 
         // Save every 30 seconds, and roll over to a new hour or day even when idle.
         let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
@@ -97,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     /// Reopening Keylog from Finder or Spotlight opens the dashboard.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        dashboard.show(.overview)
+        dashboard?.show(.overview)
         return false
     }
 
@@ -131,7 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             moveWidget: { [weak self] in
                 self?.model.widget.isVisible = true
                 self?.model.isMovingWidget = true
-            })
+            },
+            checkForUpdates: { [weak self] in MainActor.assumeIsolated { self?.updates.checkManually() } })
     }
 
     /// Starts the event tap, or asks for permission when macOS hasn't given it yet.
