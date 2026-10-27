@@ -12,6 +12,7 @@ struct KeyboardSection: View {
     let reload: ReloadID
     @State private var counts: [UInt16: Int] = [:]
     @State private var apps: [(id: String, use: AppUse)] = []
+    @AppStorage("heatStyle") private var heatStyle = HeatStyle.solid
 
     var body: some View {
         let total = counts.values.reduce(0, +)
@@ -26,6 +27,8 @@ struct KeyboardSection: View {
                     }
                 }
                 .frame(maxWidth: 280)
+                HeatStylePicker(style: $heatStyle)
+                    .frame(maxWidth: 220)
                 Spacer()
                 Text("\(Format.count(total)) presses · \(counts.count) keys used")
                     .foregroundStyle(.secondary)
@@ -33,7 +36,7 @@ struct KeyboardSection: View {
             }
 
             Card {
-                KeyboardHeatmap(counts: counts, total: total, maxCount: maxCount)
+                KeyboardHeatmap(counts: counts, total: total, maxCount: maxCount, style: heatStyle)
                     .overlay {
                         if total == 0 {
                             Text(state.app == nil ? "No keys pressed in this period." : "No keys pressed in this app in this period.")
@@ -47,7 +50,7 @@ struct KeyboardSection: View {
             HStack(spacing: 10) {
                 Text("Less").foregroundStyle(.secondary)
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(Theme.heatGradient)
+                    .fill(heatStyle.legend)
                     .frame(width: 240, height: 10)
                 Text("More").foregroundStyle(.secondary)
                 Spacer()
@@ -68,7 +71,7 @@ struct KeyboardSection: View {
                                 KeyChip(code: code).frame(width: 64, alignment: .leading)
                                 GeometryReader { geometry in
                                     Capsule()
-                                        .fill(Theme.heat(Theme.heatLevel(count, max: maxCount)))
+                                        .fill(heatStyle.color(Theme.heatLevel(count, max: maxCount)))
                                         .frame(width: max(4, geometry.size.width * CGFloat(count) / CGFloat(maxCount)))
                                 }
                                 .frame(height: 8)
@@ -125,48 +128,141 @@ enum MacKeyboard {
     ]
 }
 
+/// How pressed keys are filled. Chosen in the Keyboard view or Settings › General.
+enum HeatStyle: String, CaseIterable, Identifiable {
+    /// One flat heat colour per key.
+    case solid
+    /// Lit from the top: brighter at the top edge, deeper at the bottom.
+    case lit
+    /// From one step cooler at the top left to the key's own colour at the bottom right.
+    case ramp
+    /// A dark key with its heat glowing up from underneath.
+    case ember
+    /// One blurred heat field under translucent keys, so heat bleeds between neighbours.
+    case thermal
+    /// The thermal field with a sharp hot core under a wide bloom, more saturated.
+    case thermalIntense
+    /// Neutral: flat greys, stronger the more a key is used.
+    case graphite
+    /// Neutral: a soft grey gradient with a lit top edge.
+    case frost
+    var id: Self { self }
+
+    static let colour: [HeatStyle] = [.solid, .lit, .ramp, .ember, .thermal, .thermalIntense]
+    static let neutral: [HeatStyle] = [.graphite, .frost]
+
+    var isNeutral: Bool { Self.neutral.contains(self) }
+    var isThermal: Bool { self == .thermal || self == .thermalIntense }
+
+    /// The colour for a heat level from 0 to 1: the heat scale, or greys for the neutral styles.
+    func color(_ level: Double) -> Color {
+        isNeutral ? Color.primary.opacity(0.1 + 0.82 * level) : Theme.heat(level)
+    }
+
+    /// The Less to More legend.
+    var legend: LinearGradient {
+        isNeutral ? LinearGradient(colors: [color(0), color(1)], startPoint: .leading, endPoint: .trailing) : Theme.heatGradient
+    }
+
+    var title: String {
+        switch self {
+        case .solid: "Solid"
+        case .lit: "Lit keycap"
+        case .ramp: "Heat ramp"
+        case .ember: "Ember glow"
+        case .thermal: "Thermal camera"
+        case .thermalIntense: "Thermal, intense"
+        case .graphite: "Graphite"
+        case .frost: "Frost"
+        }
+    }
+}
+
 struct KeyboardHeatmap: View {
     let counts: [UInt16: Int]
     let total: Int
     let maxCount: Int
+    var style = HeatStyle.solid
     private let gap: CGFloat = 5
 
     var body: some View {
         GeometryReader { geometry in
             let unit = (geometry.size.width + gap) / 15
-            VStack(alignment: .leading, spacing: gap) {
-                row(MacKeyboard.functionRow, unit: unit, height: unit * 0.72)
-                ForEach(0..<MacKeyboard.rows.count, id: \.self) { index in
-                    row(MacKeyboard.rows[index], unit: unit, height: unit)
-                }
-                HStack(spacing: gap) {
-                    ForEach(MacKeyboard.bottomRow) { key(spec: $0, unit: unit, height: unit) }
-                    key(spec: KeySpec(code: 123, width: 1), unit: unit, height: unit * 0.5)
-                        .frame(height: unit - gap, alignment: .bottom)
-                    VStack(spacing: gap / 2) {
-                        key(spec: KeySpec(code: 126, width: 1), unit: unit, height: (unit - gap / 2) / 2 + gap / 2)
-                        key(spec: KeySpec(code: 125, width: 1), unit: unit, height: (unit - gap / 2) / 2 + gap / 2)
+            ZStack(alignment: .topLeading) {
+                if style.isThermal {
+                    // The field: every key's heat, blurred into its neighbours, under the glass keys.
+                    // Drawn in a canvas so the blur is part of the picture, in snapshots too.
+                    Canvas { context, _ in
+                        guard let field = context.resolveSymbol(id: 0) else { return }
+                        if style == .thermalIntense {
+                            // A wide bloom, then a sharper hot core on top of it.
+                            context.drawLayer { bloom in
+                                bloom.addFilter(.saturation(1.8))
+                                bloom.addFilter(.blur(radius: unit * 0.7))
+                                bloom.draw(field, at: .zero, anchor: .topLeading)
+                            }
+                            context.drawLayer { core in
+                                core.addFilter(.saturation(1.7))
+                                core.addFilter(.contrast(1.25))
+                                core.addFilter(.blur(radius: unit * 0.22))
+                                core.opacity = 0.9
+                                core.draw(field, at: .zero, anchor: .topLeading)
+                            }
+                        } else {
+                            context.addFilter(.saturation(1.35))
+                            context.addFilter(.blur(radius: unit * 0.45))
+                            context.draw(field, at: .zero, anchor: .topLeading)
+                        }
+                    } symbols: {
+                        layout(unit: unit, field: true).tag(0)
                     }
-                    key(spec: KeySpec(code: 124, width: 1), unit: unit, height: unit * 0.5)
-                        .frame(height: unit - gap, alignment: .bottom)
                 }
+                layout(unit: unit, field: false)
             }
         }
         .aspectRatio(15 / 5.72, contentMode: .fit)
     }
 
-    private func row(_ specs: [KeySpec], unit: CGFloat, height: CGFloat) -> some View {
-        HStack(spacing: gap) {
-            ForEach(specs) { key(spec: $0, unit: unit, height: height) }
+    private func layout(unit: CGFloat, field: Bool) -> some View {
+        VStack(alignment: .leading, spacing: gap) {
+            row(MacKeyboard.functionRow, unit: unit, height: unit * 0.72, field: field)
+            ForEach(0..<MacKeyboard.rows.count, id: \.self) { index in
+                row(MacKeyboard.rows[index], unit: unit, height: unit, field: field)
+            }
+            HStack(spacing: gap) {
+                ForEach(MacKeyboard.bottomRow) { key(spec: $0, unit: unit, height: unit, field: field) }
+                key(spec: KeySpec(code: 123, width: 1), unit: unit, height: unit * 0.5, field: field)
+                    .frame(height: unit - gap, alignment: .bottom)
+                VStack(spacing: gap / 2) {
+                    key(spec: KeySpec(code: 126, width: 1), unit: unit, height: (unit - gap / 2) / 2 + gap / 2, field: field)
+                    key(spec: KeySpec(code: 125, width: 1), unit: unit, height: (unit - gap / 2) / 2 + gap / 2, field: field)
+                }
+                key(spec: KeySpec(code: 124, width: 1), unit: unit, height: unit * 0.5, field: field)
+                    .frame(height: unit - gap, alignment: .bottom)
+            }
         }
     }
 
-    private func key(spec: KeySpec, unit: CGFloat, height: CGFloat) -> some View {
+    private func row(_ specs: [KeySpec], unit: CGFloat, height: CGFloat, field: Bool) -> some View {
+        HStack(spacing: gap) {
+            ForEach(specs) { key(spec: $0, unit: unit, height: height, field: field) }
+        }
+    }
+
+    @ViewBuilder
+    private func key(spec: KeySpec, unit: CGFloat, height: CGFloat, field: Bool) -> some View {
         let count = counts[spec.code] ?? 0
-        return KeyCapView(code: spec.code, count: count, total: total,
-                          level: Theme.heatLevel(count, max: maxCount), align: spec.align,
-                          fontSize: max(9, unit * 0.2))
-            .frame(width: spec.width * unit - gap, height: height - gap)
+        let level = Theme.heatLevel(count, max: maxCount)
+        if field {
+            // Unpressed keys stay cold, so the field shows where the heat is.
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(count > 0 ? Theme.heat(level) : Theme.heat(0).opacity(0.5))
+                .frame(width: spec.width * unit - gap, height: height - gap)
+        } else {
+            KeyCapView(code: spec.code, count: count, total: total, level: level, align: spec.align,
+                       fontSize: max(9, unit * 0.2), style: style)
+                .frame(width: spec.width * unit - gap, height: height - gap)
+        }
     }
 }
 
@@ -177,19 +273,21 @@ struct KeyCapView: View {
     let level: Double
     let align: Alignment
     let fontSize: CGFloat
+    var style = HeatStyle.solid
     @State private var hovering = false
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let pressed = count > 0
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(pressed ? AnyShapeStyle(Theme.heat(level)) : AnyShapeStyle(Color.primary.opacity(0.06)))
+            fill(pressed: pressed)
             Text(KeyNames.name(code))
                 .font(.system(size: KeyNames.name(code).count > 1 ? fontSize * 0.8 : fontSize, weight: .medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .foregroundStyle(pressed ? Theme.heatLabel(level) : Color.secondary)
+                .foregroundStyle(pressed ? label : Color.secondary)
+                .shadow(color: style.isThermal && scheme == .dark ? .black.opacity(0.45) : .clear, radius: 2)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: align)
@@ -197,7 +295,7 @@ struct KeyCapView: View {
                 Text(Format.compact(count))
                     .font(.system(size: max(8, fontSize * 0.62), weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(Theme.heatLabel(level).opacity(0.85))
+                    .foregroundStyle(label.opacity(0.85))
                     .padding(.horizontal, 4)
                     .padding(.top, 3)
             }
@@ -613,6 +711,80 @@ enum Exporter {
             try data.write(to: url, options: .atomic)
         } catch {
             NSAlert(error: error).runModal()
+        }
+    }
+}
+
+extension KeyCapView {
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 6, style: .continuous) }
+
+    /// Text on a pressed key: whichever reads on its fill.
+    var label: Color {
+        switch style {
+        case .ember: .white
+        // Dark mode keeps the field deep; light mode's is bright.
+        case .thermal, .thermalIntense: scheme == .dark ? .white : Theme.heatLabel(level)
+        case .solid, .lit, .ramp: Theme.heatLabel(level)
+        // Past the middle the grey is strong: the background colour reads on it.
+        case .graphite, .frost: level > 0.55 ? Color(nsColor: .windowBackgroundColor) : .primary
+        }
+    }
+
+    @ViewBuilder
+    func fill(pressed: Bool) -> some View {
+        let heat = Theme.heat(level)
+        if !pressed {
+            shape.fill(style.isThermal ? Color.white.opacity(0.04) : Color.primary.opacity(0.06))
+        } else {
+            switch style {
+            case .solid:
+                shape.fill(heat)
+            case .lit:
+                shape.fill(LinearGradient(colors: [Color.white.opacity(0.3), .clear, Color.black.opacity(0.22)],
+                                          startPoint: .top, endPoint: .bottom))
+                    .background(shape.fill(heat))
+                    .overlay(shape.inset(by: 0.75).stroke(Color.white.opacity(0.35), lineWidth: 1)
+                        .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center)))
+            case .ramp:
+                shape.fill(LinearGradient(colors: [Theme.heat(max(0, level - 0.2)), heat],
+                                          startPoint: .topLeading, endPoint: .bottomTrailing))
+            case .ember:
+                shape.fill(Color(white: 0.11))
+                    .overlay(shape.fill(EllipticalGradient(colors: [heat, heat.opacity(0.55), heat.opacity(0)],
+                                                           center: UnitPoint(x: 0.5, y: 1.05),
+                                                           startRadiusFraction: 0, endRadiusFraction: 0.95)
+                        .opacity(0.45 + 0.55 * level)))
+                    .overlay(shape.inset(by: 0.5).stroke(heat.opacity(0.3 + 0.5 * level), lineWidth: 1))
+            case .graphite:
+                shape.fill(style.color(level))
+            case .frost:
+                shape.fill(LinearGradient(colors: [style.color(min(1, level + 0.14)), style.color(max(0, level - 0.12))],
+                                          startPoint: .top, endPoint: .bottom))
+                    .overlay(shape.inset(by: 0.75).stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center)))
+            case .thermalIntense:
+                shape.fill(LinearGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0)],
+                                          startPoint: .top, endPoint: .center))
+                    .overlay(shape.inset(by: 0.5).stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+            case .thermal:
+                // Glass over the field: the colour comes from underneath.
+                shape.fill(LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0)],
+                                          startPoint: .top, endPoint: .bottom))
+                    .overlay(shape.inset(by: 0.5).stroke(Color.white.opacity(0.28), lineWidth: 0.75))
+            }
+        }
+    }
+}
+
+/// Chooses the heatmap's look: colour styles first, then the neutral ones.
+struct HeatStylePicker: View {
+    @Binding var style: HeatStyle
+
+    var body: some View {
+        Picker("Heatmap style", selection: $style) {
+            ForEach(HeatStyle.colour) { Text($0.title).tag($0) }
+            Divider()
+            ForEach(HeatStyle.neutral) { Text("\($0.title) (neutral)").tag($0) }
         }
     }
 }

@@ -89,6 +89,7 @@ final class SettingsController: NSObject, NSWindowDelegate {
 struct GeneralSettings: View {
     @ObservedObject var model: AppModel
     let actions: AppActions
+    @AppStorage("heatStyle") private var heatStyle = HeatStyle.solid
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -128,6 +129,7 @@ struct GeneralSettings: View {
                 Picker("Weeks start on", selection: $model.weekStart) {
                     ForEach(WeekStart.allCases) { Text($0.title).tag($0) }
                 }
+                HeatStylePicker(style: $heatStyle)
             }
             Section("Updates") {
                 Toggle("Check for updates automatically", isOn: $model.checksForUpdates)

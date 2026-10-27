@@ -56,6 +56,22 @@ enum Snapshot {
                     .padding(24).frame(width: 640).background(Color(nsColor: .windowBackgroundColor)),
                    to: out, "chart-hover-\(dark ? "dark" : "light")", dark: dark)
         }
+        // Every heatmap style on the same month, to compare.
+        let keys = model.keyCounts(for: model.period(.month, containing: Date()), app: nil)
+        let keyTotal = keys.values.reduce(0, +), keyMax = keys.values.max() ?? 0
+        for dark in [false, true] {
+            render(LazyVGrid(columns: [GridItem(.fixed(760), spacing: 32), GridItem(.fixed(760))], alignment: .leading, spacing: 14) {
+                ForEach(HeatStyle.allCases) { style in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(style.title + (style.isNeutral ? " (neutral)" : "")).font(.headline)
+                        KeyboardHeatmap(counts: keys, total: keyTotal, maxCount: keyMax, style: style)
+                    }
+                    .padding(.bottom, 12)
+                }
+            }
+            .padding(28).frame(width: 1640).background(Color(nsColor: .windowBackgroundColor)),
+                   to: out, "heatmap-styles-\(dark ? "dark" : "light")", dark: dark)
+        }
         for tab in SettingsTab.allCases {
             render(tab.content(model: model, actions: actions), size: CGSize(width: 560, height: tab.height),
                    to: out, "settings-\(tab.rawValue)", dark: false)
