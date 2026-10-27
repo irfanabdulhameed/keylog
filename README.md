@@ -8,6 +8,7 @@
 
 Count every key you press and see your typing speed (WPM), clicks and mouse distance by day, week, month and year. A native menu bar app that never records what you type and stays offline unless you turn on update checks.
 
+![Latest release](https://img.shields.io/github/v/release/irfanabdulhameed/keylog?label=release&color=5b3fd6)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000?logo=apple&logoColor=white)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![Offline by default](https://img.shields.io/badge/network-off%20by%20default-2ea44f)
@@ -15,28 +16,53 @@ Count every key you press and see your typing speed (WPM), clicks and mouse dist
 ![Liquid Glass](https://img.shields.io/badge/macOS%2026-Liquid%20Glass-7b61ff)
 ![MIT](https://img.shields.io/badge/license-MIT-blue)
 
-<img src="docs/screenshots/hero.jpg" alt="Keylog on a Mac desktop: the dashboard, the glass panel under the menu bar icon, and the floating counter" width="100%">
+<br>
+
+<a href="https://github.com/irfanabdulhameed/keylog/releases/latest/download/Keylog.dmg"><img src="docs/images/download-button.svg" width="232" height="52" alt="Download Keylog for Mac"></a>
+
+<sub>macOS 14 Sonoma or later · free and open source · <a href="#download">first-time setup</a></sub>
+
+<br><br>
+
+<img src="docs/screenshots/hero.jpg" alt="Keylog on a Mac desktop: the dashboard with a month of stacked bars, the glass panel under the menu bar icon, and the floating counter" width="100%">
+
+<br>
+
+[What's new](#new-in-11) · [Features](#features) · [Privacy](#privacy-in-detail) · [Download](#download) · [Build from source](#build-from-source) · [FAQ](#faq)
 
 </div>
 
 <br>
 
-## Download
+## New in 1.1
 
-<p align="center">
-  <a href="https://github.com/irfanabdulhameed/keylog/releases/latest/download/Keylog.dmg"><img src="docs/images/download-button.svg" width="232" height="52" alt="Download Keylog for Mac"></a>
-</p>
+<img src="docs/screenshots/styles.jpg" alt="The same month of typing in all twelve keyboard styles: Solid, Lit keycap, Heat ramp, Thermal camera, Thermal intense, Infrared, Ember glow, Neon, Magma, Glass, Graphite and Frost" width="100%">
 
-<p align="center">Requires macOS 14 Sonoma or later. Free and open source.</p>
+<table>
+<tr>
+<td width="33%" valign="top">
 
-**The first time you open it:**
+**Twelve keyboard styles**
 
-1. Open **Keylog.dmg** and drag **Keylog** onto **Applications**.
-2. Open Keylog from Applications. Keylog isn't notarized by Apple yet, so macOS says it can't check it. Click **Done** (or **OK**).
-3. Open **System Settings › Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the line about Keylog. Confirm with your password or Touch ID, then click **Open**.
-4. Keylog asks for **Input Monitoring**. Switch it on in the same Privacy & Security pane and Keylog starts counting by itself.
+Pick how the heatmap looks on the new **Customize Keyboard** page, from live previews of your own typing. Ten colour styles and two neutral ones.
 
-You only do this once. To get new versions without visiting this page, turn on **Check for updates automatically** in Settings › General. It's off until you do.
+</td>
+<td width="33%" valign="top">
+
+**Heat that behaves like heat**
+
+The thermal styles spread heat from every key you press and let it build up where you type most, like a real thermal image. Keys you never touch stay plain.
+
+</td>
+<td width="33%" valign="top">
+
+**Charts you can read at a glance**
+
+Stacked bars split into rounded segments, with a tooltip for every day, hour and month. Plus optional update checks, off until you switch them on.
+
+</td>
+</tr>
+</table>
 
 <br>
 
@@ -59,7 +85,8 @@ You type tens of thousands of keys a day. Keylog shows you how: which keys work 
 | Letters, numbers, special, space and other | Keyboard heatmap for any period | Floating counter with key-press pulse | CSV and JSON export |
 | Left and right clicks, clicks per second | Best day, busiest hour and weekday | Menu bar icon coloured by speed | Import a backup |
 | Mouse travel and scroll in real metres | Correction rate (Delete presses) | Milestone notifications | Reset today or everything |
-| Fastest second and time spent typing | Year calendar of every day | Line or bar charts | Per-keyboard on/off switches |
+| Fastest second and time spent typing | Year calendar of every day | Stacked bars with tooltips, or a line | Per-keyboard on/off switches |
+| Estimated words per minute | Twelve heatmap styles, two of them neutral | Optional, opt-in update checks | Nothing sent anywhere |
 
 <br>
 
@@ -109,19 +136,31 @@ A tiny glass pill shows today's total over everything you do, on every desktop a
 
 ### The keyboard heatmap
 
-Every key coloured by how hard it works, on a real thermal scale from cold blue to red. A log scale keeps quieter keys visible next to Space and E. Hover any key for its exact count and share, filter by app, and look at a day, a week, a month, a year or all time.
+See which keys work hardest. In the **Thermal camera** style every key you press gives off heat from where it sits, and the heat adds up where you type most, so the home row glows and the space bar shows where your thumb lands. Hover any key for its exact count and share, filter by app, and look at a day, a week, a month, a year or all time.
 
-<img src="docs/screenshots/keyboard.jpg" alt="Keyboard heatmap for a month, with the most pressed keys listed below" width="100%">
+<img src="docs/screenshots/keyboard.jpg" alt="Keyboard heatmap for a month in the Thermal camera style: heat over E, T, the home row and the space bar, with the most pressed keys listed below" width="100%">
 
 Keys are counted by their physical position, so switching between QWERTY, AZERTY, Dvorak or any input source never scrambles your history. Labels follow your current layout.
 
+#### Make it yours
+
+Click **Customize Keyboard** for a page of live previews, drawn from your own typing. Click one, or move with the arrow keys, and the heatmap changes as you choose.
+
+<img src="docs/screenshots/customize.jpg" alt="The Customize Keyboard page: a grid of live previews with Thermal camera chosen" width="100%">
+
+| Colour styles | Neutral styles |
+|---|---|
+| **Solid**, **Lit keycap** and **Heat ramp** colour each key on a thermal scale. **Thermal camera**, **Thermal, intense** and **Infrared** draw heat spreading from the keys you press. **Ember glow**, **Neon**, **Magma** and **Glass** set a different mood. | **Graphite** and **Frost** use greys only, for a quieter desk. The legend and the bars beside the heatmap turn grey too. |
+
 ### A dashboard for the long view
 
-Day, week, month, year or all time, with keyboard shortcuts for all of it (⌘1 to ⌘5, ⌘← ⌘→, ⌘T). Bars stack by key group, or switch to totals or a line; hover for exact numbers, click a bar to open that day or month.
+Day, week, month, year or all time, with keyboard shortcuts for all of it (⌘1 to ⌘5, ⌘← ⌘→, ⌘T). Bars stack by key group in rounded segments, or switch to totals or a line. Hover a bar and the others step back while a tooltip lists every group; click it to open that day or month.
 
 An **Insights** card picks out what stands out: your best day or busiest hour, your most active weekday, how often you reach for Delete, your fastest clicking, and how far your mouse travelled in football pitches or marathons.
 
-<img src="docs/screenshots/overview.jpg" alt="Dashboard overview for a week: total keys, group tiles, keys per day stacked by group, share donut and typing speed" width="100%">
+<img src="docs/screenshots/overview.jpg" alt="Dashboard overview for a month: total keys, group tiles, keys per day stacked by group, share donut and typing speed" width="100%">
+
+<img src="docs/screenshots/charts.jpg" alt="A stacked bar chart in light and dark mode with one day hovered: the other bars dim, the hovered bar is outlined and a tooltip lists letters, space, special, numbers and other" width="100%">
 
 <table>
 <tr>
@@ -153,6 +192,25 @@ A proper Settings window with toolbar tabs: launch at login, what the menu bar s
 <div align="center">
 <img src="docs/screenshots/settings.jpg" alt="Widget settings with a live preview" width="62%">
 </div>
+
+<br>
+
+## Download
+
+<p align="center">
+  <a href="https://github.com/irfanabdulhameed/keylog/releases/latest/download/Keylog.dmg"><img src="docs/images/download-button.svg" width="232" height="52" alt="Download Keylog for Mac"></a>
+</p>
+
+<p align="center">Requires macOS 14 Sonoma or later. Free and open source.</p>
+
+**The first time you open it:**
+
+1. Open **Keylog.dmg** and drag **Keylog** onto **Applications**.
+2. Open Keylog from Applications. Keylog isn't notarized by Apple yet, so macOS says it can't check it. Click **Done** (or **OK**).
+3. Open **System Settings › Privacy & Security**, scroll down to **Security**, and click **Open Anyway** next to the line about Keylog. Confirm with your password or Touch ID, then click **Open**.
+4. Keylog asks for **Input Monitoring**. Switch it on in the same Privacy & Security pane and Keylog starts counting by itself.
+
+You only do this once. To get new versions without visiting this page, turn on **Check for updates automatically** in Settings › General. It's off until you do.
 
 <br>
 
@@ -220,13 +278,14 @@ On first launch Keylog asks for **Input Monitoring**. Switch it on in System Set
 |---|---|
 | **Input** | One listen-only `CGEventTap` for keys, modifiers, left and right clicks, mouse moves and scrolls; re-enabled at once if macOS ever switches it off |
 | **Storage** | SQLite, one row per hour, written every 30 seconds and before sleep or quit; a few MB per year |
-| **UI** | SwiftUI and AppKit: `NSStatusItem`, a borderless glass panel, a non-activating floating `NSPanel`, Swift Charts |
+| **UI** | SwiftUI and AppKit: `NSStatusItem`, a borderless glass panel, a non-activating floating `NSPanel`, hand-drawn stacked bars, Swift Charts for lines |
+| **Heatmap** | Twelve styles. The thermal ones are a heat field computed from each key's position, like a plotted heatmap, so they look the same on screen and in screenshots |
 | **Performance** | Counts gathered in memory; UI updates coalesced; a hidden panel never redraws |
 | **Requirements** | macOS 14 or later, Apple silicon or Intel |
 
 ```
 Sources/KeylogCore/   counting: event tap, rules, recorder, SQLite store, periods
-Sources/Keylog/       the app: menu bar, glass panel, widget, dashboard, settings
+Sources/Keylog/       the app: menu bar, glass panel, widget, dashboard, heatmap styles, settings, updates
 Tests/                counting rules, midnight, sleep, time zones, speed, mouse, apps
 scripts/              build.sh, make-cert.sh, test.sh, make-dmg.sh, release.sh, make-icon.swift
 ```
@@ -284,7 +343,7 @@ Install Keylog and allow Input Monitoring. Today's total sits in the menu bar, a
 Keylog shows your speed live as you type, your average keys per minute while typing, an estimated WPM, and your fastest second.
 
 **Is there a keyboard heatmap app for Mac?**
-Yes: Keylog colours every key by how often you press it, for a day, a week, a month, a year or all time, and per app.
+Yes: Keylog colours every key by how often you press it, for a day, a week, a month, a year or all time, and per app, in any of twelve styles, from a thermal camera look to plain greys.
 
 **Does it count mouse side buttons?**
 No. Only left and right clicks count. If a mouse tool such as USB Overdrive turns side buttons into keyboard shortcuts, Keylog ignores those too.

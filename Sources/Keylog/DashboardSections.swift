@@ -60,7 +60,9 @@ struct KeyboardSection: View {
                 Text("More").foregroundStyle(.secondary)
                 Spacer()
                 if maxCount > 0 {
-                    Text("Hottest key: \(Format.count(maxCount)) presses. Colours use a log scale so quieter keys still show.")
+                    Text("Hottest key: \(Format.count(maxCount)) presses. "
+                         + (heatStyle.field != nil ? "Heat spreads from each key you press and adds up where you type most."
+                                                   : "Colours use a log scale so quieter keys still show."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

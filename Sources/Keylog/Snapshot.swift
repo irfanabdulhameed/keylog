@@ -85,14 +85,17 @@ enum Snapshot {
             render(OnboardingView(model: onboarding, openSettings: {}, restart: {}), to: out, "onboarding-\(state)", dark: false)
         }
 
-        // README screenshots.
+        // README screenshots. The keyboard ones show the Thermal camera style.
         let readme = out.appendingPathComponent("readme")
         try? FileManager.default.createDirectory(at: readme, withIntermediateDirectories: true)
-        render(HeroScene(dashboard: dashboard(.overview, .week), panel: panel, widget: WidgetView(model: model),
+        let savedStyle = UserDefaults.standard.string(forKey: "heatStyle")
+        UserDefaults.standard.set(HeatStyle.thermal.rawValue, forKey: "heatStyle")
+        defer { UserDefaults.standard.set(savedStyle, forKey: "heatStyle") }
+        render(HeroScene(dashboard: dashboard(.overview, .month), panel: panel, widget: WidgetView(model: model),
                          keys: model.today.keys),
                to: readme, "hero", dark: true)
         let windows: [(String, DashboardSection, PeriodKind, Bool, CGFloat)] = [
-            ("overview", .overview, .week, false, 900), ("keyboard", .keyboard, .month, false, 780),
+            ("overview", .overview, .month, false, 900), ("keyboard", .keyboard, .month, false, 780),
             ("apps", .apps, .month, true, 520), ("calendar", .calendar, .year, false, 600), ("mouse", .mouse, .month, true, 760),
         ]
         for (name, section, kind, dark, height) in windows {
@@ -115,6 +118,24 @@ enum Snapshot {
             HStack(spacing: 40) { ForEach(widgets.indices, id: \.self) { widgets[$0] } }
         }, to: readme, "widget", dark: false)
         render(SocialScene(panel: panel), to: readme, "social", dark: true)
+        render(Showcase(padding: 56) { StyleGallery(counts: keys) }, to: readme, "styles", dark: true)
+        render(Showcase {
+            KeyboardStyleSheet(counts: keys, style: .constant(.thermal)) {}
+                .background(Color(nsColor: .windowBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                .shadow(color: .black.opacity(0.35), radius: 30, y: 12)
+        }, to: readme, "customize", dark: true)
+        render(Showcase(padding: 56) {
+            HStack(spacing: 32) {
+                ForEach([ColorScheme.light, .dark], id: \.self) { scheme in
+                    Card { ActivityChart(stats: recent, stacked: true, metric: .keys, pinnedHover: 14).frame(height: 240) }
+                        .frame(width: 640)
+                        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                        .environment(\.colorScheme, scheme)
+                }
+            }
+        }, to: readme, "charts", dark: false)
         render(Showcase { MacWindow(title: "Widget") { SettingsTab.widget.content(model: model, actions: actions) }
                     .frame(width: 560, height: 615) },
                to: readme, "settings", dark: false)
@@ -262,7 +283,7 @@ struct SocialScene<Panel: View>: View {
                     .lineSpacing(4)
                     .opacity(0.95)
                 HStack(spacing: 10) {
-                    ForEach(["Typing speed & WPM", "Keyboard heatmap", "100% offline", "Open source"], id: \.self) { label in
+                    ForEach(["Typing speed & WPM", "Keyboard heatmap", "Offline by default", "Open source"], id: \.self) { label in
                         Text(label)
                             .font(.system(size: 19, weight: .semibold))
                             .padding(.horizontal, 14)
@@ -311,7 +332,8 @@ struct HeroScene<Dashboard: View, Panel: View, Widget: View>: View {
                 .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 5))
                 Image(systemName: "wifi")
                 Image(systemName: "battery.75percent")
-                Text("Wed 21 Oct  4:20 PM")
+                Text(Date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + "  "
+                     + Date().formatted(date: .omitted, time: .shortened))
             }
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.white)
@@ -373,7 +395,8 @@ enum DemoData {
         for back in (0..<days).reversed() {
             let day = calendar.date(byAdding: .day, value: -back, to: today)!
             let weekday = calendar.component(.weekday, from: day)
-            if random.next() < 0.06 { continue }
+            // A few days off, but never in the last week, so recent screens always have data.
+            if random.next() < 0.06 && back > 6 { continue }
             let dayScale = (weekday == 1 || weekday == 7 ? 0.3 : 1.0) * (0.5 + random.next())
             for (hour, weight) in curve.sorted(by: { $0.key < $1.key }) {
                 let date = calendar.date(byAdding: .hour, value: hour, to: day)!
@@ -430,5 +453,27 @@ enum DemoData {
             if roll <= 0 { return item }
         }
         return items.last!.0
+    }
+}
+
+/// Every heatmap style on the same month, four across, for the README.
+private struct StyleGallery: View {
+    let counts: [UInt16: Int]
+
+    var body: some View {
+        let total = counts.values.reduce(0, +), peak = counts.values.max() ?? 0
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(430), spacing: 20), count: 4), spacing: 20) {
+            ForEach(HeatStyle.allCases) { style in
+                VStack(alignment: .leading, spacing: 10) {
+                    KeyboardHeatmap(counts: counts, total: total, maxCount: peak, style: style,
+                                    gap: 3, showsLabels: false, interactive: false)
+                    Text(style.title + (style.isNeutral ? " · neutral" : ""))
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .padding(16)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.cardBorder, lineWidth: 0.5))
+            }
+        }
     }
 }
