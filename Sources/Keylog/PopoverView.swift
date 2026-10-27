@@ -30,6 +30,15 @@ enum HistoryMetric: String, CaseIterable, Identifiable {
         case .mouse, .scroll: Format.distance(mm: value * 1000)
         }
     }
+
+    /// "1,204 keys", "38 m".
+    func spoken(_ value: Double) -> String {
+        switch self {
+        case .keys: "\(Format.count(Int(value.rounded()))) keys"
+        case .clicks: "\(Format.count(Int(value.rounded()))) clicks"
+        case .mouse, .scroll: Format.distance(mm: value * 1000)
+        }
+    }
 }
 
 /// The frosted-glass panel under the menu bar icon.
@@ -41,6 +50,7 @@ struct PopoverView: View {
     @State private var days = 7
     @AppStorage("historyLine") private var lineChart = false
     @State private var metric = HistoryMetric.keys
+    @State private var hoveredDay: Int?
     @State private var history: PeriodStats?
     @State private var firstDay: Date?
     /// Keys per hour today as stored when the panel opened, plus today's total then,
@@ -261,53 +271,62 @@ struct PopoverView: View {
                 .buttonStyle(IconButtonStyle())
                 .help(lineChart ? "Show as bars" : "Show as a line")
             }
-            Chart(points, id: \.day) { point in
-                if lineChart {
+            if lineChart {
+                Chart(points, id: \.day) { point in
                     if point.hasData {
                         AreaMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
-                            .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0)],
+                            .foregroundStyle(LinearGradient(colors: [Theme.bar.opacity(0.3), Theme.bar.opacity(0)],
                                                             startPoint: .top, endPoint: .bottom))
                             .interpolationMethod(.catmullRom)
                         LineMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Theme.bar)
                             .interpolationMethod(.catmullRom)
                             .lineStyle(StrokeStyle(lineWidth: 2))
                         PointMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Theme.bar)
                             .symbolSize(point.isToday ? 40 : 16)
                     }
-                } else if point.hasData {
-                    BarMark(x: .value("Day", point.day, unit: .day), y: .value(metric.title, point.value))
-                        .foregroundStyle(point.isToday ? Color.accentColor.gradient : Color.accentColor.opacity(0.5).gradient)
-                        .cornerRadius(3)
-                } else {
-                    // Before Keylog was counting: a faint stub, not a zero.
-                    BarMark(x: .value("Day", point.day, unit: .day), yStart: .value("", 0), yEnd: .value("", max(total, 1) * 0.004))
-                        .foregroundStyle(Color.primary.opacity(0.15))
                 }
-            }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: days == 7 ? 1 : 7)) { _ in
-                    AxisValueLabel(format: days == 7 ? .dateTime.weekday(.narrow) : .dateTime.day().month(.abbreviated))
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                    AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
-                    AxisValueLabel {
-                        if let v = value.as(Double.self) { Text(metric.format(v)) }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: days == 7 ? 1 : 7)) { _ in
+                        AxisValueLabel(format: days == 7 ? .dateTime.weekday(.narrow) : .dateTime.day().month(.abbreviated))
                     }
                 }
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine().foregroundStyle(Color.primary.opacity(0.08))
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) { Text(metric.format(v)) }
+                        }
+                    }
+                }
+                .frame(height: 78)
+            } else {
+                BarChart(columns: points.enumerated().map { index, point in
+                    // Before Keylog was counting: a faint stub, not a zero.
+                    BarColumn(id: index, segments: [.init(value: point.value, color: Theme.bar)],
+                              label: "\(point.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))): \(metric.spoken(point.value))",
+                              placeholder: !point.hasData)
+                }, hovered: $hoveredDay,
+                         edgeLabels: points.first.flatMap { first in points.last.map { (Self.edge(first.day), Self.edge($0.day)) } },
+                         maxBarWidth: 14, labelFont: .caption)
+                .frame(height: 92)
             }
-            .frame(height: 78)
-            Text(recorded.isEmpty ? "Nothing counted yet."
+            Text(hoveredDay.flatMap { points.indices.contains($0) ? points[$0] : nil }.map { point in
+                    "\(point.day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated))) · "
+                    + (point.hasData ? metric.spoken(point.value) : "not counted yet")
+                 } ?? (recorded.isEmpty ? "Nothing counted yet."
                  : "Total \(metric.format(total)) · ≈ \(metric.format(total / Double(recorded.count))) a day"
-                 + (recorded.count < points.count ? " · counting for \(recorded.count) \(recorded.count == 1 ? "day" : "days")" : ""))
+                 + (recorded.count < points.count ? " · counting for \(recorded.count) \(recorded.count == 1 ? "day" : "days")" : "")))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(14)
         .glassCard()
+    }
+
+    private static func edge(_ day: Date) -> String {
+        Calendar.current.isDateInToday(day) ? "Today" : day.formatted(.dateTime.month(.abbreviated).day())
     }
 
     private struct HistoryPoint {
@@ -403,22 +422,18 @@ extension Color {
 struct HourlyBars: View {
     let values: [Int]
     let currentHour: Int
+    @State private var hovered: Int?
 
     var body: some View {
-        let peak = max(1, values.max() ?? 1)
         VStack(spacing: 3) {
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(values.indices, id: \.self) { hour in
-                    let value = values[hour]
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(hour == currentHour ? AnyShapeStyle(Color.accentColor)
-                              : hour < currentHour ? AnyShapeStyle(Color.accentColor.opacity(0.45))
-                              : AnyShapeStyle(Color.primary.opacity(0.1)))
-                        .frame(height: max(2, 26 * CGFloat(value) / CGFloat(peak)))
-                        .frame(maxWidth: .infinity, maxHeight: 26, alignment: .bottom)
-                        .help("\(hourName(hour)): \(Format.count(value)) keys")
-                }
-            }
+            BarChart(columns: values.indices.map { hour in
+                BarColumn(id: hour,
+                          segments: [.init(value: Double(values[hour]),
+                                           color: hour == currentHour ? Theme.bar : Theme.bar.opacity(0.5))],
+                          label: "\(hourName(hour)): \(Format.count(values[hour])) keys",
+                          placeholder: hour > currentHour || values[hour] == 0)
+            }, hovered: $hovered, gap: 1, maxBarWidth: 8, helpTags: true)
+            .frame(height: 26)
             HStack {
                 Text("12 AM")
                 Spacer()

@@ -292,6 +292,16 @@ enum PeriodTitle {
         case .month: return slot.start.formatted(.dateTime.month(.wide).year())
         }
     }
+
+    /// Short label under the first or last bar: "9 AM", "Sep 22", "Mar 25".
+    static func edge(_ slot: ChartSlot, unit: Period.Unit, count: Int) -> String {
+        switch unit {
+        case .hour: slot.start.formatted(.dateTime.hour())
+        case .day: slot.start.formatted(.dateTime.month(.abbreviated).day())
+        case .month: count > 12 ? slot.start.formatted(.dateTime.month(.abbreviated).year(.twoDigits))
+                                : slot.start.formatted(.dateTime.month(.abbreviated))
+        }
+    }
 }
 
 extension Period.Unit {
@@ -498,49 +508,66 @@ struct ActivityChart: View {
     /// A line through the totals instead of bars.
     var line = false
     var onSelect: (ChartSlot) -> Void = { _ in }
+    /// Holds one bar in its hover state, for snapshot design checks.
+    var pinnedHover: Int?
     @State private var hovered: Int?
 
     var body: some View {
+        Group {
+            if line { lineChart } else { bars }
+        }
+        .onChange(of: stats.period) { hovered = nil }
+    }
+
+    private var groupsShown: Bool { stacked && metric == .keys }
+
+    private var bars: some View {
         let unit = stats.period.unit
-        Chart {
+        let columns = stats.slots.map { slot in
+            let counts = stats.slotCounts[slot.index]
+            let segments = groupsShown
+                ? Theme.stackOrder.map { BarColumn.Segment(value: Double(counts[$0]), color: Theme.color($0)) }
+                : [BarColumn.Segment(value: metric.value(counts), color: Theme.bar)]
+            return BarColumn(id: slot.index, segments: segments,
+                             label: "\(PeriodTitle.slot(slot, unit: unit)): \(metric.spoken(metric.value(counts)))")
+        }
+        let edges = stats.slots.first.flatMap { first in
+            stats.slots.last.map { (PeriodTitle.edge(first, unit: unit, count: stats.slots.count),
+                                    PeriodTitle.edge($0, unit: unit, count: stats.slots.count)) }
+        }
+        return BarChart(columns: columns, hovered: pinnedHover.map { .constant($0) } ?? $hovered, edgeLabels: edges,
+                        onSelect: unit == .hour ? nil : { index in
+                            if stats.slots.indices.contains(index) { onSelect(stats.slots[index]) }
+                        }) { index in
+            ChartTooltip(title: PeriodTitle.slot(stats.slots[index], unit: unit),
+                         counts: stats.slotCounts[index], metric: metric, groups: groupsShown)
+        }
+    }
+
+    private var lineChart: some View {
+        let unit = stats.period.unit
+        return Chart {
             ForEach(stats.slots) { slot in
                 let counts = stats.slotCounts[slot.index]
-                if line {
-                    AreaMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
-                        .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.28), Color.accentColor.opacity(0)],
-                                                        startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.catmullRom)
-                    LineMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
-                        .foregroundStyle(Color.accentColor)
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 2.5))
-                    if hovered == slot.index {
-                        PointMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
-                            .foregroundStyle(Color.accentColor)
-                            .symbolSize(60)
-                    }
-                } else if stacked && metric == .keys {
-                    ForEach(KeyGroup.allCases, id: \.self) { group in
-                        BarMark(x: .value("Time", slot.start, unit: unit.component),
-                                y: .value("Keys", counts[group]))
-                            .foregroundStyle(by: .value("Group", Theme.name(group)))
-                            .opacity(hovered == nil || hovered == slot.index ? 1 : 0.55)
-                    }
-                } else {
-                    BarMark(x: .value("Time", slot.start, unit: unit.component),
-                            y: .value(metric.title, metric.value(counts)))
-                        .foregroundStyle(Color.accentColor)
-                        .opacity(hovered == nil || hovered == slot.index ? 1 : 0.55)
+                AreaMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                    .foregroundStyle(LinearGradient(colors: [Theme.bar.opacity(0.28), Theme.bar.opacity(0)],
+                                                    startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.catmullRom)
+                LineMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                    .foregroundStyle(Theme.bar)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                if hovered == slot.index {
+                    PointMark(x: .value("Time", slot.start, unit: unit.component), y: .value(metric.title, metric.value(counts)))
+                        .foregroundStyle(Theme.bar)
+                        .symbolSize(60)
                 }
             }
         }
-        .onChange(of: stats.period) { hovered = nil }
-        .chartForegroundStyleScale(domain: KeyGroup.allCases.map(Theme.name), range: KeyGroup.allCases.map(Theme.color))
-        .chartLegend(stacked && metric == .keys && !line ? .visible : .hidden)
         .chartXAxis { xAxis(unit) }
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine()
+                AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
                 AxisValueLabel {
                     if let v = value.as(Double.self) { Text(metric.format(v)) }
                 }
@@ -568,7 +595,7 @@ struct ActivityChart: View {
                    let x = proxy.position(forX: stats.slots[hovered].start) {
                     let width = plot.width / CGFloat(max(1, stats.slots.count))
                     ChartTooltip(title: PeriodTitle.slot(stats.slots[hovered], unit: unit),
-                                 counts: stats.slotCounts[hovered], metric: metric)
+                                 counts: stats.slotCounts[hovered], metric: metric, groups: metric == .keys)
                         .fixedSize()
                         .position(x: min(max(plot.minX + x + width / 2, 90), geometry.size.width - 90), y: 40)
                         .allowsHitTesting(false)
@@ -606,30 +633,18 @@ struct ChartTooltip: View {
     let title: String
     let counts: Counts
     let metric: HistoryMetric
+    /// One row per key group, in stacking order.
+    var groups = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption.weight(.semibold))
-            if metric == .keys {
-                Text("\(Format.count(counts.keys)) keys").font(.callout.weight(.semibold)).monospacedDigit()
-                ForEach(KeyGroup.allCases, id: \.self) { group in
-                    HStack(spacing: 5) {
-                        Circle().fill(Theme.color(group)).frame(width: 6, height: 6)
-                        Text(Theme.name(group))
-                        Spacer(minLength: 10)
-                        Text(Format.count(counts[group])).monospacedDigit()
-                    }
-                    .font(.caption)
-                }
-            } else {
-                Text(metric.format(metric.value(counts))).font(.callout.weight(.semibold)).monospacedDigit()
-            }
+        if metric == .keys {
+            BarTooltip(title: title, total: Format.count(counts.keys),
+                       rows: groups ? Theme.stackOrder.filter { counts[$0] > 0 }.map {
+                           BarTooltip.Row(name: Theme.name($0), color: Theme.color($0), value: Format.count(counts[$0]))
+                       } : [])
+        } else {
+            BarTooltip(title: title, total: metric.format(metric.value(counts)))
         }
-        .padding(10)
-        .frame(minWidth: 140, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
     }
 }
 

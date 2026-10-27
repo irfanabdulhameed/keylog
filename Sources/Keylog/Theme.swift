@@ -6,12 +6,40 @@ import SwiftUI
 enum Theme {
     static func color(_ group: KeyGroup) -> Color {
         switch group {
-        case .letters: .blue
-        case .numbers: .green
-        case .special: .orange
-        case .space: .purple
-        case .other: .gray
+        case .letters: violet
+        case .numbers: amber
+        case .special: steel
+        case .space: indigo
+        case .other: slate
         }
+    }
+
+    // Soft chart colours, a little deeper in light mode so they hold on white.
+    private static let violet = dynamic(light: 0x7C55E6, dark: 0xA07CF4)
+    private static let indigo = dynamic(light: 0x4F6CE3, dark: 0x6F8CF5)
+    private static let steel = dynamic(light: 0x7690C4, dark: 0x9EB3DD)
+    private static let amber = dynamic(light: 0xD39E2A, dark: 0xECC66F)
+    private static let slate = dynamic(light: 0x8E9099, dark: 0x7D808A)
+
+    /// Stacked bars, bottom to top: the biggest group on the floor.
+    static let stackOrder: [KeyGroup] = [.letters, .space, .special, .numbers, .other]
+    /// Bars that show a single value.
+    static let bar = violet
+    /// Chart tooltip card.
+    static let tooltip = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.13, alpha: 0.97)
+            : NSColor(white: 1, alpha: 0.97)
+    })
+
+    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        func rgb(_ hex: UInt32) -> NSColor {
+            NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                    blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        }
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? rgb(dark) : rgb(light)
+        })
     }
 
     static func name(_ group: KeyGroup) -> String {

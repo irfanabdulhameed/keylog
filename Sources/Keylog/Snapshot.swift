@@ -49,6 +49,13 @@ enum Snapshot {
                        to: out, "dashboard-\(section.rawValue)-\(mode)", dark: dark)
             }
         }
+        // A stacked chart with one bar hovered: dimming, outline and tooltip.
+        let recent = model.stats(for: model.recentDays(20))
+        for dark in [false, true] {
+            render(Card { ActivityChart(stats: recent, stacked: true, metric: .keys, pinnedHover: 14).frame(height: 240) }
+                    .padding(24).frame(width: 640).background(Color(nsColor: .windowBackgroundColor)),
+                   to: out, "chart-hover-\(dark ? "dark" : "light")", dark: dark)
+        }
         for tab in SettingsTab.allCases {
             render(tab.content(model: model, actions: actions), size: CGSize(width: 560, height: tab.height),
                    to: out, "settings-\(tab.rawValue)", dark: false)
