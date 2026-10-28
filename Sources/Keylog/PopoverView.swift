@@ -309,7 +309,7 @@ struct PopoverView: View {
                               placeholder: !point.hasData)
                 }, hovered: $hoveredDay,
                          edgeLabels: points.first.flatMap { first in points.last.map { (Self.edge(first.day), Self.edge($0.day)) } },
-                         maxBarWidth: 14, labelFont: .caption)
+                         labelFont: .caption)
                 .frame(height: 92)
             }
             Text(hoveredDay.flatMap { points.indices.contains($0) ? points[$0] : nil }.map { point in
@@ -432,7 +432,7 @@ struct HourlyBars: View {
                                            color: hour == currentHour ? Theme.bar : Theme.bar.opacity(0.5))],
                           label: "\(hourName(hour)): \(Format.count(values[hour])) keys",
                           placeholder: hour > currentHour || values[hour] == 0)
-            }, hovered: $hovered, gap: 1, maxBarWidth: 8, helpTags: true)
+            }, hovered: $hovered, gap: 1, helpTags: true)
             .frame(height: 26)
             HStack {
                 Text("12 AM")

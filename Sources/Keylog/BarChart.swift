@@ -17,7 +17,8 @@ struct BarColumn: Identifiable {
     var total: Double { segments.reduce(0) { $0 + $1.value } }
 }
 
-/// Stacked bars drawn as separate rounded segments with gaps between them, no y-axis.
+/// Stacked bars drawn as separate rounded segments with gaps between them, no y-axis. Each bar
+/// fills its slot except for a gap of about a fifth of it.
 /// Hovering dims the other bars, outlines the bar and shows `tooltip` beside it.
 struct BarChart<Tooltip: View>: View {
     let columns: [BarColumn]
@@ -25,7 +26,6 @@ struct BarChart<Tooltip: View>: View {
     /// First and last slot names, printed under the ends of the chart.
     var edgeLabels: (String, String)?
     var gap: CGFloat = 2
-    var maxBarWidth: CGFloat = 20
     var labelFont: Font = .callout
     var helpTags = false
     var onSelect: ((Int) -> Void)?
@@ -41,7 +41,7 @@ struct BarChart<Tooltip: View>: View {
         VStack(spacing: 10) {
             GeometryReader { geometry in
                 let pitch = geometry.size.width / CGFloat(max(1, columns.count))
-                let width = min(maxBarWidth, max(2, (pitch * 0.6).rounded()))
+                let width = max(2, (pitch - Self.spacing(pitch)).rounded())
                 let peak = columns.map(\.total).max() ?? 0
                 let pieces = columns.map { $0.segments.filter { $0.value > 0 }.count }.max() ?? 1
                 let usable = max(0, geometry.size.height - headroom - gap * CGFloat(max(0, pieces - 1)))
@@ -100,8 +100,12 @@ struct BarChart<Tooltip: View>: View {
         }
     }
 
+    /// The gap between bars: about a fifth of each slot, from 2 to 24 points.
+    static func spacing(_ pitch: CGFloat) -> CGFloat { min(24, max(2, pitch * 0.2)) }
+
     private func bar(_ column: BarColumn, width: CGFloat, scale: CGFloat) -> some View {
-        let radius = min(3.5, width / 2)
+        // Wider bars round a little more, up to 8 points.
+        let radius = min(width / 2, max(3.5, min(8, width * 0.12)))
         let isHovered = hovered == column.id
         let pieces = column.segments.filter { $0.value > 0 }
         return VStack(spacing: gap) {
@@ -125,7 +129,8 @@ struct BarChart<Tooltip: View>: View {
             if isHovered {
                 RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.5), lineWidth: 1.5)
-                    .padding(-4)
+                    // Inside the gap, however narrow the bars are.
+                    .padding(-min(4, max(1, (width * 0.25).rounded())))
                     .transition(.opacity)
             }
         }
@@ -182,9 +187,9 @@ struct BarTooltip: View {
 
 extension BarChart where Tooltip == EmptyView {
     init(columns: [BarColumn], hovered: Binding<Int?>, edgeLabels: (String, String)? = nil,
-         gap: CGFloat = 2, maxBarWidth: CGFloat = 20, labelFont: Font = .callout, helpTags: Bool = false,
+         gap: CGFloat = 2, labelFont: Font = .callout, helpTags: Bool = false,
          onSelect: ((Int) -> Void)? = nil) {
-        self.init(columns: columns, hovered: hovered, edgeLabels: edgeLabels, gap: gap, maxBarWidth: maxBarWidth,
+        self.init(columns: columns, hovered: hovered, edgeLabels: edgeLabels, gap: gap,
                   labelFont: labelFont, helpTags: helpTags, onSelect: onSelect) { _ in EmptyView() }
     }
 }
