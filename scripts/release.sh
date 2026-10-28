@@ -147,7 +147,9 @@ fi
 [ "$(plist_get CFBundleShortVersionString build/Keylog.app/Contents/Info.plist)" = "$VERSION" ] || fail "the built app isn't $VERSION"
 # Input Monitoring belongs to the signing certificate, and the updater only installs a copy signed
 # like the running one: every release must carry the same certificate.
-codesign -dvv build/Keylog.app 2>&1 | grep -q "^Authority=${KEYLOG_SIGN_ID:-Keylog Dev}$" \
+# Read it whole first: grep -q stops reading early, which fails the pipe under pipefail.
+SIGNATURE="$(codesign -dvv build/Keylog.app 2>&1)"
+grep -q "^Authority=${KEYLOG_SIGN_ID:-Keylog Dev}$" <<<"$SIGNATURE" \
   || fail "build/Keylog.app isn't signed with \"${KEYLOG_SIGN_ID:-Keylog Dev}\" (run scripts/make-cert.sh); an ad-hoc release can't update anyone"
 [ -z "$(git status --porcelain)" ] || fail "building changed tracked files"
 
